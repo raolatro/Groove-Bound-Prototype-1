@@ -23,6 +23,7 @@ local weapons = {
             projectileSpeed = 600, -- Pixels per second
             range = 500,        -- Maximum travel distance
             projectiles = 1,    -- Number of projectiles per shot
+            piercing = 0,       -- Number of enemies projectile can pass through
         },
         levelUps = {
             damage = "+5",       -- Flat increase per level
@@ -48,6 +49,7 @@ local weapons = {
             range = 300,
             projectiles = 3,    -- Number of projectiles in the spread
             spreadAngle = 45,   -- Total angle of the spread in degrees
+            piercing = 1,       -- Number of enemies each projectile can pass through
         },
         levelUps = {
             damage = "+3",

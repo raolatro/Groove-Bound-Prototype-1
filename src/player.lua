@@ -78,9 +78,10 @@ function Player:new(x, y, world)
         stickX = 0,
         stickY = 0,
         -- Health-related fields
-        currentHP = TUNING.MAX_HP,
-        maxHP = TUNING.MAX_HP,
+        currentHP = Config.TUNING.PLAYER.MAX_HP or 200,
+        maxHP = Config.TUNING.PLAYER.MAX_HP or 200,
         invincibleTimer = 0,
+        invincibleTime = Config.TUNING.PLAYER.INVINCIBLE_TIME or 1.0,
         damageFlashTimer = 0,
         -- Hit area for debug visualization
         hitbox = {
@@ -431,6 +432,24 @@ function Player:update(dt)
         self.fireTimer = self.fireTimer - dt
     end
     
+    -- Update invincibility timer if active
+    if self.invincibleTimer > 0 then
+        self.invincibleTimer = self.invincibleTimer - dt
+        
+        -- Debug flash during invincibility
+        if _G.DEBUG_MASTER and _G.DEBUG_HP then
+            -- Flash faster when invincible for visual feedback
+            if math.floor(self.invincibleTimer * 10) % 2 == 0 then
+                -- Debug invincibility visualization
+            end
+        end
+    end
+    
+    -- Update damage flash timer if active
+    if self.damageFlashTimer > 0 then
+        self.damageFlashTimer = self.damageFlashTimer - dt
+    end
+    
     -- Handle firing
     if self.input.fire and self.fireTimer <= 0 then
         self:fire()
@@ -498,7 +517,7 @@ function Player:takeDamage(amount)
     self.currentHP = math.max(0, self.currentHP - amount)
     
     -- Start invincibility timer with safety check
-    self.invincibleTimer = Config.TUNING.PLAYER.INVINCIBLE_TIME or 0.8
+    self.invincibleTimer = self.invincibleTime or Config.TUNING.PLAYER.INVINCIBLE_TIME or 0.8
     
     -- Start damage flash timer
     self.damageFlashTimer = 0.2
@@ -553,7 +572,23 @@ function Player:draw()
         -- Use direction for horizontal flipping only, no position offset
         local scaleX = (self.direction < 0) and -1 or 1
         
-        love.graphics.setColor(1, 1, 1)
+        -- Set color based on damage state
+        if self.damageFlashTimer > 0 then
+            -- Flash red when taking damage
+            local flashColor = Config.DEV.HP_DEBUG.DAMAGE_FLASH_COLOR or {1, 0, 0, 1}
+            love.graphics.setColor(flashColor)
+        elseif self.invincibleTimer > 0 then
+            -- Flash between normal and translucent when invincible
+            if math.floor(self.invincibleTimer * 10) % 2 == 0 then
+                love.graphics.setColor(1, 1, 1, 0.6) -- Translucent
+            else
+                love.graphics.setColor(1, 1, 1, 1) -- Normal
+            end
+        else
+            -- Normal rendering
+            love.graphics.setColor(1, 1, 1)
+        end
+        
         self.currentAnimation:draw(
             self.spriteSheet,
             cx,  -- draw at collider x
@@ -607,6 +642,44 @@ function Player:draw()
         love.graphics.setColor(1, 0.5, 0, 0.7)
         local points = {self.collider:getWorldPoints(self.collider:getShape():getPoints())}
         love.graphics.polygon("line", points)
+    end
+    
+    -- Draw HP debug visualization
+    if _G.DEBUG_MASTER and _G.DEBUG_HP then
+        -- Get current position
+        local px, py = x, y
+        
+        -- Draw hit radius circle
+        local hitRadius = self.hitRadius or Config.TUNING.PLAYER.HIT_RADIUS or 24
+        
+        -- Draw health indicator circle with color based on HP percent
+        local hpPercent = self.currentHP / self.maxHP
+        
+        -- Use color gradient: Green (full HP) to Yellow (half HP) to Red (low HP)
+        local r = math.min(2 - hpPercent * 2, 1) -- Red increases as health decreases
+        local g = math.min(hpPercent * 2, 1)     -- Green decreases as health decreases
+        
+        -- If invincible, use a pulsing effect
+        if self.invincibleTimer > 0 then
+            -- Pulse between blue and normal HP color
+            if math.floor(self.invincibleTimer * 10) % 2 == 0 then
+                love.graphics.setColor(0.3, 0.3, 1, 0.6) -- Blue for invincibility
+            else
+                love.graphics.setColor(r, g, 0, 0.6)
+            end
+        else
+            love.graphics.setColor(r, g, 0, 0.6)
+        end
+        
+        -- Draw the hitbox circle
+        love.graphics.circle("line", px, py, hitRadius)
+        
+        -- Draw numeric HP overlay
+        if Config.TUNING.DEBUG and Config.TUNING.DEBUG.NUM_OVERLAY then
+            love.graphics.setColor(1, 1, 1, 0.8)
+            love.graphics.print(tostring(math.floor(self.currentHP)) .. "/" .. tostring(self.maxHP), 
+                               px - 15, py - hitRadius - 15)
+        end
     end
     
     -- Draw aim debug if enabled

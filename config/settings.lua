@@ -33,7 +33,7 @@ local Config = {
             FIRE_COOLDOWN = 0.25  -- seconds between shots
         },
         CAMERA = {
-            LERP_FACTOR = 0.5, -- Linear interpolation factor for smooth following
+            LERP_FACTOR = 1, -- Linear interpolation factor for smooth following
             SHAKE_DURATION = 0.2, -- Duration of screen shake in seconds
             SHAKE_INTENSITY = 5 -- Intensity of screen shake
         },

@@ -184,6 +184,23 @@ function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, spr
     proj.maxLifetime = maxLifetime
     proj.colour = colour or {1, 1, 1, 1}
     
+    -- Set weapon data properties if provided
+    if weaponInfo then
+        -- Set piercing based on weapon data
+        proj.piercing = weaponInfo.piercing or 0
+        
+        -- Set other weapon properties if available
+        proj.critChance = weaponInfo.critChance or 0
+        proj.critMultiplier = weaponInfo.critMultiplier or 2
+        proj.sourceWeapon = weaponInfo.id or "unknown"
+        
+        -- Debug output for weapon properties
+        if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+            print(string.format("Projectile properties: piercing=%d, critChance=%.1f%%, sourceWeapon=%s", 
+                proj.piercing, proj.critChance * 100, proj.sourceWeapon))
+        end
+    end
+    
     return proj
 end
 

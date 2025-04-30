@@ -59,10 +59,13 @@ local behaviours = {
             weapon.def.colour,
             nil,  -- No special radius
             nil,  -- No sprite
-            {     -- Weapon info for debugging
+            {     -- Weapon info including stats for gameplay and debugging
                 name = weapon.def.displayName,
                 level = weapon.level,
-                id = weapon.id
+                id = weapon.id,
+                piercing = weapon.stats.piercing or 0,
+                critChance = weapon.stats.critChance or 0,
+                critMultiplier = weapon.stats.critMultiplier or 2
             }
         )
     end,
@@ -108,10 +111,13 @@ local behaviours = {
                 weapon.def.colour,
                 nil,  -- No special radius
                 nil,  -- No sprite
-                {     -- Weapon info for debugging
+                {     -- Weapon info including stats for gameplay and debugging
                     name = weapon.def.displayName,
                     level = weapon.level,
-                    id = weapon.id
+                    id = weapon.id,
+                    piercing = weapon.stats.piercing or 0,
+                    critChance = weapon.stats.critChance or 0,
+                    critMultiplier = weapon.stats.critMultiplier or 2
                 }
             )
         end

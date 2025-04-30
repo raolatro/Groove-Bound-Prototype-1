@@ -130,8 +130,14 @@ function GemSystem:addXP(amount)
     end
     
     -- Update level system if available
-    if self.levelSystem then
+    if self.levelSystem and self.levelSystem.setXP then
+        -- Make sure the system has the method before calling it
         self.levelSystem:setXP(self.currentXP, self.xpForNextLevel)
+        
+        -- Debug output for XP sync
+        if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
+            print(string.format("Syncing XP with LevelSystem: %d/%d", self.currentXP, self.xpForNextLevel))
+        end
     end
 end
 
