@@ -47,7 +47,7 @@ local enemies = {
         hp = 5,
         spawnRate = 1.0, -- relative spawn rate (higher = more common)
         xpMultiplier = 1, -- base amount of XP dropped when killed
-        contactDamage = 10, -- Damage on contact with player
+        contactDamage = 30, -- Damage on contact with player
         projectileEnabled = false
     },
     
@@ -62,7 +62,7 @@ local enemies = {
         hp = 8,
         spawnRate = 0.5, -- Less common than basic enemies
         xpMultiplier = 2, -- Drops more XP
-        contactDamage = 15, -- Damage on contact with player
+        contactDamage = 30, -- Damage on contact with player
         projectileEnabled = true,
         projectile = {
             fireRate = 1.5, -- Shots per second
@@ -85,7 +85,7 @@ local enemies = {
         hp = 3, -- Less health
         spawnRate = 0.7,
         xpMultiplier = 1.5,
-        contactDamage = 20, -- Higher damage due to speed
+        contactDamage = 30, -- Higher damage due to speed
         projectileEnabled = false
     },
     

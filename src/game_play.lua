@@ -249,10 +249,35 @@ end
 
 -- Handle mouse press
 function GamePlay:mousepressed(x, y, button)
-    -- Handle mouse presses when not paused
-    if not self.isPaused then
-        -- TODO: Handle mouse press for shooting, etc.
+    -- Forward to game systems (this handles game over menu clicks as well)
+    if self.gameSystems then
+        self.gameSystems:mousepressed(x, y, button)
     end
+    
+    -- Handle other mouse presses when not paused
+    if not self.isPaused then
+        -- Handle player mouse input if needed
+        if self.player then
+            self.player:mousepressed(x, y, button)
+        end
+    end
+end
+
+-- Handle gamepad button press
+function GamePlay:gamepadpressed(joystick, button)
+    -- Forward to game systems (this handles game over menu gamepad input)
+    if self.gameSystems then
+        self.gameSystems:gamepadpressed(joystick, button)
+    end
+    
+    -- Toggle pause on start button
+    if button == "start" and not (self.gameSystems and self.gameSystems.gameOverSystem and self.gameSystems.gameOverSystem.isGameOver) then
+        self.isPaused = not self.isPaused
+        return
+    end
+    
+    -- No need to forward to player as it doesn't have a gamepadpressed method yet
+    -- We can add other gamepad controls here in the future if needed
 end
 
 -- Handle window resize

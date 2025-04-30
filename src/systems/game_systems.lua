@@ -18,6 +18,7 @@ local EnemySystem = require("src.systems.enemy_system")
 local EnemySpawner = require("src.systems.enemy_spawner")
 local GemSystem = require("src.systems.gem_system")
 local PlayerSystem = require("src.systems.player_system")
+local GameOverSystem = require("src.systems.game_over_system")
 
 -- Import entities
 local EnemyProjectile = require("src.entities.enemy_projectile")
@@ -41,6 +42,10 @@ local GameSystems = {
     enemyProjectileSystem = nil,
     gemSystem = nil,
     playerSystem = nil,
+    gameOverSystem = nil,
+    
+    -- Game state
+    gameTimer = 0,
     
     -- UI component instances
     inventoryGrid = nil,
@@ -97,6 +102,9 @@ function GameSystems:init(player)
     -- Initialize the gem system (connects to level-up system)
     self.gemSystem = GemSystem:init(player, self.levelUpSystem)
     
+    -- Initialize the game over system (after player and systems)
+    self.gameOverSystem = GameOverSystem:init(player, self)
+    
     -- Expose GameSystems to global for other systems to access
     _G.gameSystems = self
     
@@ -140,6 +148,22 @@ end
 function GameSystems:update(dt)
     -- Check if initialized
     if not self.initialized then
+        return
+    end
+    
+    -- Update game timer (used for stats)
+    self.gameTimer = self.gameTimer + dt
+    
+    -- Update game over system first to check state
+    if self.gameOverSystem then
+        self.gameOverSystem:update(dt)
+    end
+    
+    -- If game is over, only update specific systems
+    if self.gameOverSystem and self.gameOverSystem.isGameOver then
+        -- Only update UI components when game is over
+        if self.xpBar then self.xpBar:update(dt) end
+        if self.hpBar then self.hpBar:update(dt) end
         return
     end
     
@@ -270,7 +294,7 @@ function GameSystems:drawUI()
         return
     end
     
-    -- Draw UI components
+    -- Draw standard UI components
     if self.inventoryGrid then
         self.inventoryGrid:draw()
     end
@@ -283,12 +307,28 @@ function GameSystems:drawUI()
         self.hpBar:draw()
     end
     
-    -- Always draw level up panel last (on top)
-    self.levelUpPanel:draw()
+    -- Draw level up panel (if not game over)
+    if not (self.gameOverSystem and self.gameOverSystem.isGameOver) then
+        self.levelUpPanel:draw()
+    end
+    
+    -- Draw game over UI last (on top of everything)
+    if self.gameOverSystem then
+        self.gameOverSystem:draw()
+    end
 end
 
 -- Handle keypressed events
 function GameSystems:keypressed(key)
+    -- Handle game over input
+    if self.gameOverSystem and self.gameOverSystem.isGameOver then
+        -- Forward key presses to game over menu
+        if self.gameOverSystem.gameMenu then
+            self.gameOverSystem.gameMenu:keypressed(key)
+        end
+        return -- Don't process other input during game over
+    end
+    
     -- Debug keys for weapon testing
     if _G.DEBUG_MASTER and _G.DEBUG_WEAPONS then
         -- Add weapon with 1-4 keys
@@ -324,6 +364,45 @@ function GameSystems:keypressed(key)
         if key == "x" then
             self.levelUpSystem:addXP(100)
         end
+        
+        -- Level up weapon with 5 key
+        if key == "5" then
+            self:levelUpCurrentWeapon()
+        end
+    end
+end
+
+-- Handle mouse press events
+function GameSystems:mousepressed(x, y, button)
+    -- Check if initialized
+    if not self.initialized then
+        return
+    end
+    
+    -- Handle game over input
+    if self.gameOverSystem and self.gameOverSystem.isGameOver then
+        -- Forward mouse presses to game over menu
+        if self.gameOverSystem.gameMenu then
+            self.gameOverSystem.gameMenu:mousepressed(x, y, button)
+        end
+        return -- Don't process other input during game over
+    end
+end
+
+-- Handle gamepad button press events
+function GameSystems:gamepadpressed(joystick, button)
+    -- Check if initialized
+    if not self.initialized then
+        return
+    end
+    
+    -- Handle game over input
+    if self.gameOverSystem and self.gameOverSystem.isGameOver then
+        -- Forward gamepad button presses to game over menu
+        if self.gameOverSystem.gameMenu then
+            self.gameOverSystem.gameMenu:gamepadpressed(joystick, button)
+        end
+        return -- Don't process other input during game over
     end
 end
 
