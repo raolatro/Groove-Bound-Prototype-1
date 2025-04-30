@@ -77,6 +77,11 @@ function Player:new(x, y, world)
         -- Analog stick values for combined movement
         stickX = 0,
         stickY = 0,
+        -- Health-related fields
+        currentHP = TUNING.MAX_HP,
+        maxHP = TUNING.MAX_HP,
+        invincibleTimer = 0,
+        damageFlashTimer = 0,
         -- Hit area for debug visualization
         hitbox = {
             x = x or 0,
@@ -395,15 +400,15 @@ function Player:update(dt)
     self.stickX = 0
     self.stickY = 0
     
-    -- Process movement input based on available devices
-    -- Order matters: keyboard can override gamepad for movement
-    self:processGamepadInput()
-    self:processKeyboardInput()
-    
-    -- Process aim input exclusively based on current input mode
+    -- Process input based on current input mode
     if Controls.inputMode == "pad" then
+        self:processGamepadInput()
         self:readPadAim()
+    else
+        self:processKeyboardInput()
     end
+    
+    -- Mouse aiming is always enabled regardless of input mode
     if Controls.inputMode == "mouse" then
         self:readMouseAim()
     end
@@ -441,9 +446,97 @@ function Player:update(dt)
     -- Weapons are now updated by GameSystems
     -- No need to update weapons here
     
-    -- Update projectiles
+    -- But we'll still update projectiles
     Projectile:updateAll(dt)
 end
+
+-- Update health-related timers
+function Player:updateHealthTimers(dt)
+    -- Update invincibility timer
+    if self.invincibleTimer > 0 then
+        self.invincibleTimer = self.invincibleTimer - dt
+        
+        -- Clamp to zero to prevent negative values
+        if self.invincibleTimer < 0 then
+            self.invincibleTimer = 0
+        end
+    end
+    
+    -- Update damage flash timer
+    if self.damageFlashTimer > 0 then
+        self.damageFlashTimer = self.damageFlashTimer - dt
+        
+        -- Clamp to zero to prevent negative values
+        if self.damageFlashTimer < 0 then
+            self.damageFlashTimer = 0
+        end
+    end
+end
+
+-- Apply damage to the player
+function Player:takeDamage(amount)
+    -- Skip if invincible
+    if self.invincibleTimer > 0 or Config.DEV.INVINCIBLE then
+        if _G.DEBUG_MASTER and _G.DEBUG_HP then
+            print("Player is invincible, damage ignored")
+        end
+        return false
+    end
+    
+    -- Apply damage with safety checks
+    -- Initialize currentHP if it's nil
+    if self.currentHP == nil then
+        self.currentHP = Config.TUNING.PLAYER.MAX_HP or 200
+    end
+    
+    -- Initialize maxHP if nil
+    if self.maxHP == nil then
+        self.maxHP = Config.TUNING.PLAYER.MAX_HP or 200
+    end
+    
+    local oldHP = self.currentHP
+    self.currentHP = math.max(0, self.currentHP - amount)
+    
+    -- Start invincibility timer with safety check
+    self.invincibleTimer = Config.TUNING.PLAYER.INVINCIBLE_TIME or 0.8
+    
+    -- Start damage flash timer
+    self.damageFlashTimer = 0.2
+    
+    -- Debug output
+    if _G.DEBUG_MASTER and _G.DEBUG_HP then
+        print(string.format("Player -%d HP (%d/%d)", amount, self.currentHP, self.maxHP))
+    end
+    
+    -- Fire event
+    local Event = require("lib.event")
+    Event.dispatch("PLAYER_DAMAGED", {
+        amount = amount,
+        newHP = self.currentHP
+    })
+    
+    -- Check for death
+    if self.currentHP <= 0 then
+        self:die()
+    end
+    
+    return true
+end
+
+-- Player death
+function Player:die()
+    -- Debug output
+    if _G.DEBUG_MASTER and _G.DEBUG_HP then
+        print("PLAYER DIED")
+    end
+    
+    -- Fire event
+    local Event = require("lib.event")
+    Event.dispatch("PLAYER_DEAD", {})
+    
+    -- For now, we don't implement actual death behavior
+    -- This would be handled by the game state management
+ end
 
 -- Draw the player
 function Player:draw()

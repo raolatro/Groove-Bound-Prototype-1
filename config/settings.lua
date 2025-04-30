@@ -46,12 +46,25 @@ local Config = {
             MAX_PLAYER_WEAPONS = 6,      -- Maximum number of weapons a player can have
             ACQUIRE_COOLDOWN = 0.5,       -- Cooldown before another weapon can be acquired
             DEFAULT_COOLDOWN = 0.5        -- Default cooldown if not specified in weapon def
+        },
+        ENEMIES = {
+            SAFE_SPAWN_RADIUS = 500,     -- px from player centre
+            BASE_SPAWN_RATE = 0.8,       -- enemies/sec (can be overridden per enemy)
+            RANDOM_RANGE_PCT = 0.20,     -- ±20% size & colour shift
+            DEFAULT_CONTACT = 20,        -- Default damage on contact if not specified
+            MAX_HP = 100,                -- Maximum enemy health
+            INVINCIBLE_TIME = 0.5        -- Seconds of invincibility after being hit
+        },
+        GEMS = {
+            BASE_XP = 1,                -- XP per gem before multiplier
+            ATTRACT_RADIUS = 240,        -- px; dashed circle debug
+            ATTRACT_SPEED = 600          -- px/s toward player
         }
     },
     
     -- Development settings
     DEV = {
-        DEBUG_MASTER = false,      -- Always on during prototype phase
+        DEBUG_MASTER = true,      -- Always on during prototype phase
         DEBUG_PLAYER = true,      -- Player-specific debug toggle (Shift+F3)
         DEBUG_PHYSICS = true,     -- Physics debug toggle
         DEBUG_ASSETS = true,      -- Asset debug toggle
@@ -59,13 +72,21 @@ local Config = {
         DEBUG_PROJECTILES = true, -- Projectiles debug toggle (Shift+F4)
         DEBUG_AIM = true,        -- Aim debug toggle (shows aim vector and target)
         DEBUG_UI = true,         -- UI debug toggle (shows cooldown times, names, etc.)
+        DEBUG_ENEMIES = true,    -- Enemy debug toggle (shows hitboxes, HP, stats)
+        DEBUG_GEMS = true,       -- XP gem debug toggle (shows attraction radius)
+        DEBUG_HP = true,         -- HP system debug (shows damage numbers, hitbox flashes)
         DEBUG_GRID = true,        -- Grid debug toggle
         DEBUG_WALLS = true,       -- Walls debug toggle
         DEBUG_CAMERA = true,      -- Camera debug (always on)
         DEBUG_COLLISION = true,   -- Collision debug (always on)
         DEBUG_FPS = false,         -- Show FPS counter
-        INVINCIBLE = true,        -- Player invincibility for testing
-        LOG_LEVEL = "info"        -- log, info, warn, error
+        RANDOMIZE_ENEMIES = true, -- Randomize enemy size and color within range
+        INVINCIBLE = false,        -- Player invincibility for testing
+        LOG_LEVEL = "info",       -- log, info, warn, error
+        HP_DEBUG = {
+            DAMAGE_FLASH_TIME = 0.2,  -- Time to flash hitbox after damage
+            DAMAGE_FLASH_COLOR = {1, 0, 0, 1}  -- Color to flash hitbox after damage
+        }
     },
     
     -- Control mapping

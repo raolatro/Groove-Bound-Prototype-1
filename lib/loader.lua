@@ -17,7 +17,15 @@ local Loader = {
     Windfield = require(PATHS.LIB.WINDFIELD),
     
     -- Animation
-    Anim8 = require(PATHS.LIB.ANIM8:gsub("%.lua$", ""))
+    Anim8 = require(PATHS.LIB.ANIM8:gsub("%.lua$", "")),
+    
+    -- Event system
+    event = require("lib.event"),
+    
+    -- Utility modules
+    utils = {
+        math = require("lib.utils.math")
+    }
 }
 
 -- Safe asset helper -------------------------------------------------------

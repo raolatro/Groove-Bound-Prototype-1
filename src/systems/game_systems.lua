@@ -14,11 +14,20 @@ local DEBUG_UI = _G.DEBUG_UI or false
 local WeaponSystem = require("src.systems.weapon_system")
 local PassiveSystem = require("src.systems.passive_system")
 local LevelUpSystem = require("src.systems.level_up_system")
+local EnemySystem = require("src.systems.enemy_system")
+local EnemySpawner = require("src.systems.enemy_spawner")
+local GemSystem = require("src.systems.gem_system")
+
+-- Import entities
+local EnemyProjectile = require("src.entities.enemy_projectile")
+local XPGem = require("src.entities.xp_gem")
+local Projectile = require("src.projectile")
 
 -- Import UI components
 local InventoryGrid = require("src.ui.inventory_grid")
 local LevelUpPanel = require("src.ui.level_up_panel")
 local XPBar = require("src.ui.xp_bar")
+local HPBar = require("src.ui.hp_bar")
 
 -- The GameSystems module
 local GameSystems = {
@@ -26,11 +35,16 @@ local GameSystems = {
     weaponSystem = nil,
     passiveSystem = nil,
     levelUpSystem = nil,
+    enemySystem = nil,
+    enemySpawner = nil,
+    enemyProjectileSystem = nil,
+    gemSystem = nil,
     
     -- UI component instances
     inventoryGrid = nil,
     levelUpPanel = nil,
     xpBar = nil,
+    hpBar = nil,
     
     -- Debug features
     debugStats = {
@@ -59,10 +73,43 @@ function GameSystems:init(player)
     -- Initialize level-up system with references to both systems
     self.levelUpSystem = LevelUpSystem:init(self.weaponSystem, self.passiveSystem)
     
+    -- Initialize enemy systems
+    EnemyProjectile:initPool() -- Initialize enemy projectile pool
+    XPGem:initPool() -- Initialize XP gem pool
+    
+    -- Get world reference for physics (assumed to be available from the gameplay state)
+    local world = player.world or _G.world
+    
+    -- Initialize the enemy system
+    self.enemySystem = EnemySystem:init(player, world)
+    
+    -- Initialize the enemy projectile system (reference stored directly in EnemyProjectile)
+    self.enemyProjectileSystem = EnemyProjectile
+    
+    -- Connect enemy system to projectile system
+    self.enemySystem:setProjectileSystem(self.enemyProjectileSystem)
+    
+    -- Initialize the gem system (connects to level-up system)
+    self.gemSystem = GemSystem:init(player, self.levelUpSystem)
+    
+    -- Initialize the enemy spawner last (once enemy system is ready)
+    self.enemySpawner = EnemySpawner:init(player, self.enemySystem, world)
+    
     -- Set up UI components
     self.inventoryGrid = InventoryGrid:init(self.weaponSystem)
     self.levelUpPanel = LevelUpPanel:init(self.levelUpSystem)
     self.xpBar = XPBar:init(self.levelUpSystem)
+    self.hpBar = HPBar:init(player, self.xpBar)
+    
+    -- Set up event listeners for HP system
+    local Event = require("lib.event")
+    
+    Event.subscribe("PLAYER_DAMAGED", function(data)
+        -- Trigger HP bar damage flash effect
+        if self.hpBar then
+            self.hpBar:onDamage()
+        end
+    end)
     
     -- Add starter weapon
     local success, message = self.weaponSystem:addWeapon("pistol")
@@ -111,9 +158,42 @@ function GameSystems:update(dt)
     self.inventoryGrid:update(dt)
     self.levelUpPanel:update(dt)
     self.xpBar:update(dt)
+    self.hpBar:update(dt)
+    
+    -- Update enemy systems
+    self.enemySpawner:update(dt)
+    self.enemySystem:update(dt)
+    self.enemyProjectileSystem:updateAll(dt)
+    
+    -- Update gem system
+    self.gemSystem:update(dt)
+    
+    -- Check for collisions between player projectiles and enemies
+    if self.weaponSystem and self.enemySystem then
+        -- Get active projectiles from weapon system
+        local projectiles = Projectile.activeProjectiles
+        
+        -- Check collisions
+        self.enemySystem:checkProjectileCollisions(projectiles)
+    end
+    
+    -- Check for collisions between enemy projectiles and player
+    if self.enemyProjectileSystem and not Config.DEV.INVINCIBLE then
+        -- Check collisions
+        local damage = self.enemyProjectileSystem:checkPlayerCollision(self.player)
+        
+        -- If player was hit and damage returned, apply it
+        if damage and damage > 0 then
+            -- This is where you would apply damage to the player
+            -- For now, just log it
+            if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
+                print("Player took " .. damage .. " damage from enemy projectile!")
+            end
+        end
+    end
     
     -- Debug XP addition with K key
-    if DEBUG_MASTER and DEBUG_WEAPONS and love.keyboard.isDown("k") then
+    if _G.DEBUG_MASTER and _G.DEBUG_WEAPONS and love.keyboard.isDown("k") then
         self.levelUpSystem:addXP(self.debugStats.xpToAdd)
     end
     
@@ -157,6 +237,21 @@ function GameSystems:drawWorld()
     -- Draw weapon system debug visuals
     self.weaponSystem:draw()
     
+    -- Draw enemy system in world space
+    if self.enemySystem then
+        self.enemySystem:draw()
+    end
+    
+    -- Draw enemy projectiles in world space
+    if self.enemyProjectileSystem then
+        self.enemyProjectileSystem:drawAll()
+    end
+    
+    -- Draw XP gems in world space
+    if self.gemSystem then
+        self.gemSystem:draw()
+    end
+    
     -- No UI drawing here - that's in drawUI()
 end
 
@@ -176,6 +271,10 @@ function GameSystems:drawUI()
         self.xpBar:draw()
     end
     
+    if self.hpBar then
+        self.hpBar:draw()
+    end
+    
     -- Always draw level up panel last (on top)
     self.levelUpPanel:draw()
 end
@@ -183,7 +282,7 @@ end
 -- Handle keypressed events
 function GameSystems:keypressed(key)
     -- Debug keys for weapon testing
-    if DEBUG_MASTER and DEBUG_WEAPONS then
+    if _G.DEBUG_MASTER and _G.DEBUG_WEAPONS then
         -- Add weapon with 1-4 keys
         if key == "1" then
             self.weaponSystem:addWeapon("pistol")

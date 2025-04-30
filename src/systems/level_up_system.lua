@@ -84,6 +84,25 @@ function LevelUpSystem:addXP(amount)
     return true, "Added " .. amount .. " XP"
 end
 
+-- Set the current XP values directly (used by UI and external systems)
+function LevelUpSystem:setXP(current, target)
+    -- Skip if not initialized
+    if not self.initialized then
+        return false
+    end
+    
+    -- Only update if values are provided
+    if current ~= nil then
+        self.currentXP = current
+    end
+    
+    if target ~= nil then
+        self.xpToNextLevel = target
+    end
+    
+    return true
+end
+
 -- Trigger the level-up sequence
 function LevelUpSystem:triggerLevelUp()
     -- Set leveling up state
