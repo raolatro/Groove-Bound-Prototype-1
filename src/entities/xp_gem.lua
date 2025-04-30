@@ -133,10 +133,16 @@ function XPGem:updateAll(dt, player)
         gem.x = gem.x + gem.vx * dt
         gem.y = gem.y + gem.vy * dt
         
-        -- Check collection
+        -- Check collection (simple centroid-based test as per requirements)
+        -- Uses distance to gem center rather than shape-based collision
         if dist <= playerHitRadius then
             -- Dispatch XP gained event
             Event.dispatch("XP_GAINED", {amount = gem.value})
+            
+            -- Debug output for gem collection
+            if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
+                print(string.format("Collected gem worth %d XP at distance %.1f", gem.value, dist))
+            end
             
             -- Debug output
             if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
@@ -153,6 +159,15 @@ function XPGem:updateAll(dt, player)
     end
 end
 
+-- Helper function to generate triangle vertices
+local function triVerts(c, s)
+    return {
+        c.x, c.y - s,         -- Top vertex
+        c.x + s * 0.866, c.y + s * 0.5,  -- Bottom right vertex
+        c.x - s * 0.866, c.y + s * 0.5   -- Bottom left vertex
+    }
+end
+
 -- Draw all active gems
 function XPGem:drawAll()
     -- Store current graphics state
@@ -164,13 +179,19 @@ function XPGem:drawAll()
         local pulse = 1.0 + 0.2 * math.sin(gem.lifeTime * 5)
         local size = gem.size * pulse
         
-        -- Draw gem (filled circle with glow)
-        love.graphics.setColor(gem.color)
-        love.graphics.circle("fill", gem.x, gem.y, size)
+        -- Create triangle vertices
+        local center = {x = gem.x, y = gem.y}
+        local vertices = triVerts(center, size)
         
-        -- Draw gem outline
-        love.graphics.setColor(1, 1, 1, 0.7)
-        love.graphics.circle("line", gem.x, gem.y, size)
+        -- Draw gem (filled triangle)
+        love.graphics.setColor(0, 0.8, 1, 0.8) -- Cyan-blue color
+        love.graphics.polygon("fill", vertices)
+        
+        -- Draw gem outline in debug mode or for visibility
+        if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
+            love.graphics.setColor(1, 1, 1, 1) -- White outline
+            love.graphics.polygon("line", vertices)
+        end
         
         -- Debug visualization of attraction state
         if _G.DEBUG_MASTER and _G.DEBUG_GEMS and gem.isAttracted then

@@ -185,17 +185,19 @@ function EnemyProjectile:checkPlayerCollision(player)
         
         -- Check collision
         if dist <= (playerHitRadius + proj.size) then
-            -- Player hit by projectile
-            if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-                print(string.format("Player hit by enemy projectile for %d damage", proj.damage))
-            end
+            -- Player hit by projectile - dispatch event for PlayerSystem
+            local Event = require("lib.event")
+            Event.dispatch("ENEMY_PROJECTILE_HIT", {
+                damage = proj.damage,
+                projectileType = proj.projectileType or "default"
+            })
             
             -- Deactivate projectile
             proj.isActive = false
             table.remove(activeProjectiles, i)
             table.insert(projectilePool, proj)
             
-            -- Return damage value (can be used for player health reduction)
+            -- Return damage value (for compatibility with existing code)
             return proj.damage
         end
     end

@@ -48,16 +48,16 @@ local Config = {
             DEFAULT_COOLDOWN = 0.5        -- Default cooldown if not specified in weapon def
         },
         ENEMIES = {
-            SAFE_SPAWN_RADIUS = 500,     -- px from player centre
+            SAFE_SPAWN_RADIUS = 300,     -- px from player centre
             BASE_SPAWN_RATE = 0.8,       -- enemies/sec (can be overridden per enemy)
             RANDOM_RANGE_PCT = 0.20,     -- ±20% size & colour shift
             DEFAULT_CONTACT = 20,        -- Default damage on contact if not specified
-            MAX_HP = 100,                -- Maximum enemy health
-            INVINCIBLE_TIME = 0.5        -- Seconds of invincibility after being hit
+            MAX_HP = 50,                -- Maximum enemy health
+            INVINCIBLE_TIME = 0.1        -- Seconds of invincibility after being hit
         },
         GEMS = {
-            BASE_XP = 1,                -- XP per gem before multiplier
-            ATTRACT_RADIUS = 240,        -- px; dashed circle debug
+            BASE_XP = 50,                -- XP per gem before multiplier
+            ATTRACT_RADIUS = 350,        -- px; dashed circle debug
             ATTRACT_SPEED = 600          -- px/s toward player
         }
     },

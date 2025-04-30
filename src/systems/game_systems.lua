@@ -17,6 +17,7 @@ local LevelUpSystem = require("src.systems.level_up_system")
 local EnemySystem = require("src.systems.enemy_system")
 local EnemySpawner = require("src.systems.enemy_spawner")
 local GemSystem = require("src.systems.gem_system")
+local PlayerSystem = require("src.systems.player_system")
 
 -- Import entities
 local EnemyProjectile = require("src.entities.enemy_projectile")
@@ -39,6 +40,7 @@ local GameSystems = {
     enemySpawner = nil,
     enemyProjectileSystem = nil,
     gemSystem = nil,
+    playerSystem = nil,
     
     -- UI component instances
     inventoryGrid = nil,
@@ -89,8 +91,14 @@ function GameSystems:init(player)
     -- Connect enemy system to projectile system
     self.enemySystem:setProjectileSystem(self.enemyProjectileSystem)
     
+    -- Initialize the player system (handles player damage and visual feedback)
+    self.playerSystem = PlayerSystem:init(player)
+    
     -- Initialize the gem system (connects to level-up system)
     self.gemSystem = GemSystem:init(player, self.levelUpSystem)
+    
+    -- Expose GameSystems to global for other systems to access
+    _G.gameSystems = self
     
     -- Initialize the enemy spawner last (once enemy system is ready)
     self.enemySpawner = EnemySpawner:init(player, self.enemySystem, world)

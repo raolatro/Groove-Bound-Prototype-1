@@ -15,14 +15,14 @@ local weapons = {
         colour = rgb(66, 200, 255),
         rarity = "common",
         category = "pistol",
-        maxLevel = 5,
+        maxLevel = 10,
         behaviour = "forward",
         stats = {
-            damage = 10,        -- Base damage per shot
-            fireRate = 1.5,     -- Time between shots (seconds) - drastically reduced fire rate
+            damage = 20,        -- Base damage per shot
+            fireRate = 0.2,     -- Time between shots (seconds) - drastically reduced fire rate
             projectileSpeed = 600, -- Pixels per second
             range = 500,        -- Maximum travel distance
-            projectiles = 1,    -- Number of projectiles per shot
+            projectiles = 5,    -- Number of projectiles per shot
             piercing = 0,       -- Number of enemies projectile can pass through
         },
         levelUps = {
@@ -30,6 +30,7 @@ local weapons = {
             fireRate = "-5%",    -- Percentage decrease (faster firing)
             projectileSpeed = "+10%", 
             range = "+10%",
+            projectiles = "+1"
         }
     },
     

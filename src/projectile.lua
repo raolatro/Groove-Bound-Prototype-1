@@ -234,6 +234,51 @@ function Projectile:updateAll(dt)
         proj.hitArea.x = proj.x
         proj.hitArea.y = proj.y
         
+        -- Check for collisions with enemies if we have access to the enemy system
+        local gameSystems = _G.gameSystems or {}
+        if gameSystems.enemySystem and proj.isActive then
+            -- Get all active enemies
+            local enemies = gameSystems.enemySystem.enemies or {}
+            
+            -- Check this projectile against each enemy
+            for _, enemy in ipairs(enemies) do
+                if enemy.isActive and not enemy.isDying then
+                    -- Calculate distance between projectile and enemy
+                    local dx = enemy.x - proj.x
+                    local dy = enemy.y - proj.y
+                    local dist = math.sqrt(dx*dx + dy*dy)
+                    
+                    -- Get hit radii with fallbacks
+                    local enemyHitRadius = enemy.size or 20
+                    local projRadius = proj.radius or proj.size or 5
+                    
+                    -- Check if collision occurred
+                    if dist < (enemyHitRadius + projRadius) then
+                        -- Calculate damage, using Combat system if available
+                        local damage = proj.damage
+                        
+                        -- Apply damage to enemy via the enemy system
+                        gameSystems.enemySystem:applyDamage(enemy, damage, "playerProjectile")
+                        
+                        -- Handle piercing
+                        if proj.piercing and proj.piercing > 0 then
+                            -- Reduce piercing count and keep projectile active
+                            proj.piercing = proj.piercing - 1
+                            
+                            -- Debug output
+                            if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
+                                print(string.format("Projectile pierced through enemy! Remaining pierces: %d", proj.piercing))
+                            end
+                        else
+                            -- Deactivate projectile without piercing
+                            proj.isActive = false
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        
         -- Check if projectile should be removed
         local shouldDeactivate = false
         

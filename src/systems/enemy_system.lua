@@ -365,21 +365,31 @@ function EnemySystem:checkPlayerCollision(enemy, dt)
         -- Contact damage from enemy definition or use default
         local contactDamage = enemy.def.contactDamage or Config.TUNING.ENEMIES.DEFAULT_CONTACT
         
-        -- Apply damage to player
-        local damageApplied = self.player:takeDamage(contactDamage)
+        -- Get PlayerSystem from GameSystems
+        local gameSystems = _G.gameSystems or {}
         
-        if damageApplied and _G.DEBUG_MASTER and _G.DEBUG_HP then
-            print(string.format("Player hit by %s for %d damage", 
-                enemy.displayName, contactDamage))
+        -- Apply damage to player using PlayerSystem if available
+        local damageApplied = false
+        if gameSystems.playerSystem then
+            damageApplied = gameSystems.playerSystem:applyDamage(contactDamage, "contact")
+        else
+            -- Fallback to direct player damage if PlayerSystem not available
+            damageApplied = self.player:takeDamage(contactDamage)
+            
+            -- Debug output in fallback mode
+            if damageApplied and _G.DEBUG_MASTER and _G.DEBUG_HP then
+                print(string.format("Player hit by %s for %d damage (FALLBACK PATH)", 
+                    enemy.displayName, contactDamage))
+            end
         end
         
-        -- Kill the enemy on contact (kamikaze behavior)
-        self:killEnemy(enemy)
+        -- Kill the enemy on contact (kamikaze behavior) with "contact" cause
+        self:killEnemy(enemy, "contact")
     end
 end
 
 -- Apply damage to an enemy and check if it dies
-function EnemySystem:damageEnemy(enemy, damage)
+function EnemySystem:applyDamage(enemy, damage, source)
     -- Skip if enemy is already dying
     if enemy.isDying or not enemy.isActive then
         return false
@@ -388,30 +398,36 @@ function EnemySystem:damageEnemy(enemy, damage)
     -- Apply damage
     enemy.hp = enemy.hp - damage
     
-    -- Fire damage event
+    -- Fire damage event with source information
     Event.dispatch("ENEMY_DAMAGED", {
         id = enemy.id,
         amount = damage,
-        newHP = enemy.hp
+        newHP = enemy.hp,
+        source = source or "unknown"
     })
     
     -- Debug output
     if _G.DEBUG_MASTER and (_G.DEBUG_ENEMIES or _G.DEBUG_HP) then
-        print(string.format("%s took %d damage! HP: %d/%d", 
-            enemy.displayName, damage, enemy.hp, enemy.maxHp))
+        print(string.format("%s took %d damage from %s! HP: %d/%d", 
+            enemy.displayName, damage, source or "unknown", enemy.hp, enemy.maxHp))
     end
     
     -- Check if enemy died
     if enemy.hp <= 0 then
-        self:killEnemy(enemy)
+        self:killEnemy(enemy, source)
         return true
     end
     
     return false
 end
 
--- Handle enemy death
-function EnemySystem:killEnemy(enemy)
+-- Keep legacy method for backward compatibility
+function EnemySystem:damageEnemy(enemy, damage)
+    return self:applyDamage(enemy, damage, "unknown")
+end
+
+-- Handle enemy death with cause tracking
+function EnemySystem:killEnemy(enemy, cause)
     -- Skip if already dying
     if enemy.isDying then
         return
@@ -423,14 +439,15 @@ function EnemySystem:killEnemy(enemy)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print(string.format("%s was killed at position (%.1f, %.1f)!", 
-            enemy.displayName, enemy.x, enemy.y))
+        print(string.format("%s was killed by %s at position (%.1f, %.1f)!", 
+            enemy.displayName, cause or "unknown", enemy.x, enemy.y))
     end
     
-    -- Dispatch death event with position and XP multiplier
+    -- Dispatch death event with position, enemy info, and cause
     Event.dispatch("ENEMY_KILLED", {
         enemy = enemy,
-        position = {x = enemy.x, y = enemy.y}
+        position = {x = enemy.x, y = enemy.y},
+        cause = cause or "unknown"
     })
 end
 

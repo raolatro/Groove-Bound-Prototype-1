@@ -493,7 +493,7 @@ function Player:updateHealthTimers(dt)
 end
 
 -- Apply damage to the player
-function Player:takeDamage(amount)
+function Player:takeDamage(amount, source)
     -- Skip if invincible
     if self.invincibleTimer > 0 or Config.DEV.INVINCIBLE then
         if _G.DEBUG_MASTER and _G.DEBUG_HP then
@@ -516,6 +516,11 @@ function Player:takeDamage(amount)
     local oldHP = self.currentHP
     self.currentHP = math.max(0, self.currentHP - amount)
     
+    -- Track last damage source for debug display
+    self.lastDamageSource = source or "unknown"
+    self.lastDamageAmount = amount
+    self.lastDamageTime = 0 -- Will be incremented in update
+    
     -- Start invincibility timer with safety check
     self.invincibleTimer = self.invincibleTime or Config.TUNING.PLAYER.INVINCIBLE_TIME or 0.8
     
@@ -524,14 +529,16 @@ function Player:takeDamage(amount)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_HP then
-        print(string.format("Player -%d HP (%d/%d)", amount, self.currentHP, self.maxHP))
+        print(string.format("Player -%d HP from %s (%d/%d)", 
+            amount, source or "unknown", self.currentHP, self.maxHP))
     end
     
-    -- Fire event
+    -- Fire event with source information
     local Event = require("lib.event")
     Event.dispatch("PLAYER_DAMAGED", {
         amount = amount,
-        newHP = self.currentHP
+        newHP = self.currentHP,
+        source = source or "unknown"
     })
     
     -- Check for death
@@ -677,8 +684,22 @@ function Player:draw()
         -- Draw numeric HP overlay
         if Config.TUNING.DEBUG and Config.TUNING.DEBUG.NUM_OVERLAY then
             love.graphics.setColor(1, 1, 1, 0.8)
+            
+            -- Display current/max HP
             love.graphics.print(tostring(math.floor(self.currentHP)) .. "/" .. tostring(self.maxHP), 
                                px - 15, py - hitRadius - 15)
+            
+            -- Display damage source if recently damaged
+            if self.lastDamageSource and self.lastDamageTime and self.lastDamageTime < 3.0 then
+                love.graphics.setColor(1, 0.7, 0.7, 0.8)
+                love.graphics.print(string.format("-%.0f (%s)", self.lastDamageAmount or 0, self.lastDamageSource),
+                                  px - 25, py - hitRadius - 30)
+            end
+        end
+        
+        -- Update last damage time in draw to ensure it's updated even during paused states
+        if self.lastDamageTime ~= nil then
+            self.lastDamageTime = self.lastDamageTime + love.timer.getDelta()
         end
     end
     

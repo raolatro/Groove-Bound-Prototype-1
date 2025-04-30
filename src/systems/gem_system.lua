@@ -83,9 +83,26 @@ function GemSystem:setupEvents()
         -- Get enemy data
         local enemy = data.enemy
         local position = data.position
+        local cause = data.cause or "unknown"
+        
+        -- Only spawn gems if the enemy was killed by a player projectile
+        if cause ~= "playerProjectile" then
+            -- Debug output for non-projectile kills (no gems)
+            if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
+                print(string.format("No gems spawned for %s kill (cause: %s)", 
+                    enemy.displayName or "unknown enemy", cause))
+            end
+            return
+        end
         
         -- Calculate gems to spawn based on XP multiplier
-        local gemCount = math.max(1, math.floor(enemy.xpMultiplier))
+        local gemCount = math.max(1, math.floor(enemy.xpMultiplier or 1))
+        
+        -- Debug output
+        if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
+            print(string.format("Spawning %d gems from %s (projectile kill)", 
+                gemCount, enemy.displayName or "unknown enemy"))
+        end
         
         -- Spawn gems at enemy's death position
         XPGem:spawnMultiple(position.x, position.y, gemCount, TUNING.BASE_XP)
