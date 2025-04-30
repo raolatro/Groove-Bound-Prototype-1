@@ -70,7 +70,8 @@ A twin-stick survivor roguelike game built with LÖVE framework.
 - Debug flags in each module are gated by the master debug flag
 - During prototype phase debug overlay is always on; remove `_G.Debug.enabled` default or reintroduce keybind later.
 - Camera.lag setting (0-1): 0 = instant snap, 1 = no movement. Default 0.15 provides smooth following.
-- Collider size derives from GRID.base; change grid, collider auto-scales.
+- Collider size is triple-height (3 × GRID.base) with 1× width; change grid base, collider auto-scales.
+- Player aiming uses right stick (gamepad) or mouse position (keyboard); red crosshair is temporary placeholder for projectile spawn.
 - Debug overlay now uses system font in red; change size via Debug.font = love.graphics.newFont(size).
 
 ## Weapon System

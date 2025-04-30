@@ -13,7 +13,8 @@ local Debug = {
     maxMessages = 30,      -- Maximum number of messages to display
     displayTime = 10,      -- Time each message stays on screen (seconds)
     font = nil,            -- Debug font (system font)
-    enabled = true         -- Always enabled during prototype phase
+    enabled = true,        -- Always enabled during prototype phase
+    AIM = true             -- Draw aim crosshair and circle
 }
 
 -- Log a message to the debug display

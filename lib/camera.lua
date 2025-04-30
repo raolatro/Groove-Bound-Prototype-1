@@ -190,11 +190,33 @@ function Camera:worldToScreen(worldX, worldY)
         x, y = tempX, tempY
     end
     
-    x = x * self.scaleX
-    y = y * self.scaleY
-    
+    -- Apply translation
     x = x + self.viewportWidth / 2
     y = y + self.viewportHeight / 2
+    
+    return x, y
+end
+
+-- Convert screen coordinates to world coordinates
+function Camera:screenToWorld(screenX, screenY)
+    local x, y = screenX, screenY
+    
+    -- Remove screen center offset
+    x = x - self.viewportWidth / 2
+    y = y - self.viewportHeight / 2
+    
+    -- Apply rotation (inverse)
+    if self.rotation ~= 0 then
+        local cosRot = math.cos(-self.rotation)
+        local sinRot = math.sin(-self.rotation)
+        local tempX = x * cosRot - y * sinRot
+        local tempY = x * sinRot + y * cosRot
+        x, y = tempX, tempY
+    end
+    
+    -- Apply translation
+    x = x + self.x
+    y = y + self.y
     
     return x, y
 end

@@ -5,6 +5,7 @@ local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
 local UI = require("config.ui")
+local Controls = require("config.controls")
 local WeaponManager = require("src.weapon_manager")
 local Projectile = require("src.projectile")
 
@@ -13,12 +14,20 @@ local Debug = _G.Debug
 
 -- Shorthand for readability
 local TUNING = Config.TUNING.PLAYER
-local CONTROLS = Config.CONTROLS
 local DEV = Config.DEV
 local BG = UI.GRID
 
 -- Local debug flags, ANDed with master debug
 local DEBUG_PLAYER = false
+
+-- Vector normalization helper function
+local function VecNormalize(x, y)
+    local length = math.sqrt(x * x + y * y)
+    if length > 0 then
+        return x / length, y / length
+    end
+    return x, y
+end
 local DEBUG_COLLISION = false
 
 -- Player metatable
@@ -73,12 +82,13 @@ function Player:new(x, y, world)
     
     -- Initialize physics body if world is provided
     if world then
-        -- Create collider (centered on player position)
+        -- Create triple-height collider (centered on player position)
+        -- One grid square above and below the player = 3x height
         instance.collider = world:newRectangleCollider(
             instance.x - BG.base/2,
-            instance.y - BG.base/2,
+            instance.y - BG.base*3/2,  -- Centered vertically on 3x height
             BG.base,
-            BG.base,
+            BG.base*3,  -- Triple height collider
             {collision_class = 'player'}
         )
         
@@ -144,17 +154,27 @@ end
 -- Process keyboard input
 function Player:processKeyboardInput()
     -- Movement keys
-    self.input.up = love.keyboard.isDown(CONTROLS.KEYBOARD.MOVE.UP)
-    self.input.down = love.keyboard.isDown(CONTROLS.KEYBOARD.MOVE.DOWN)
-    self.input.left = love.keyboard.isDown(CONTROLS.KEYBOARD.MOVE.LEFT)
-    self.input.right = love.keyboard.isDown(CONTROLS.KEYBOARD.MOVE.RIGHT)
+    self.input.up = love.keyboard.isDown(Controls.KEYBOARD.UP)
+    self.input.down = love.keyboard.isDown(Controls.KEYBOARD.DOWN)
+    self.input.left = love.keyboard.isDown(Controls.KEYBOARD.LEFT)
+    self.input.right = love.keyboard.isDown(Controls.KEYBOARD.RIGHT)
     
     -- Fire input
-    self.input.fire = love.keyboard.isDown(CONTROLS.KEYBOARD.FIRE)
+    self.input.fire = love.keyboard.isDown(Controls.KEYBOARD.FIRE)
     
-    -- Mouse aiming when using keyboard
+    -- Mouse aiming - convert to world coordinates
     local mouseX, mouseY = love.mouse.getPosition()
-    self:updateAimFromPoint(mouseX, mouseY)
+    
+    -- Get current camera module from GameStatePlay
+    -- We need to translate screen coordinates to world coordinates
+    local gameState = L.Gamestate.current()
+    if gameState and gameState.camera then
+        -- Convert screen to world coordinates
+        mouseX, mouseY = gameState.camera:screenToWorld(mouseX, mouseY)
+        
+        -- Update aim based on world position
+        self:updateAimFromPoint(mouseX, mouseY)
+    end
 end
 
 -- Process gamepad input
@@ -162,31 +182,33 @@ function Player:processGamepadInput()
     if not self.gamepad then return end
     
     -- Get left stick for movement
-    local leftX = self.gamepad:getGamepadAxis(CONTROLS.GAMEPAD.MOVE_AXIS.HORIZONTAL)
-    local leftY = self.gamepad:getGamepadAxis(CONTROLS.GAMEPAD.MOVE_AXIS.VERTICAL)
+    local leftX = self.gamepad:getGamepadAxis(Controls.GAMEPAD.MOVE_AXES.HORIZONTAL)
+    local leftY = self.gamepad:getGamepadAxis(Controls.GAMEPAD.MOVE_AXES.VERTICAL)
     
     -- Apply deadzone
-    if math.abs(leftX) < CONTROLS.DEADZONE then leftX = 0 end
-    if math.abs(leftY) < CONTROLS.DEADZONE then leftY = 0 end
+    if math.abs(leftX) < Controls.DEADZONE then leftX = 0 end
+    if math.abs(leftY) < Controls.DEADZONE then leftY = 0 end
     
     -- Set input flags based on analog values
-    self.input.left = leftX < -CONTROLS.DEADZONE
-    self.input.right = leftX > CONTROLS.DEADZONE
-    self.input.up = leftY < -CONTROLS.DEADZONE
-    self.input.down = leftY > CONTROLS.DEADZONE
+    self.input.left = leftX < -Controls.DEADZONE
+    self.input.right = leftX > Controls.DEADZONE
+    self.input.up = leftY < -Controls.DEADZONE
+    self.input.down = leftY > Controls.DEADZONE
     
     -- Get right stick for aiming
-    local rightX = self.gamepad:getGamepadAxis(CONTROLS.GAMEPAD.AIM_AXIS.HORIZONTAL)
-    local rightY = self.gamepad:getGamepadAxis(CONTROLS.GAMEPAD.AIM_AXIS.VERTICAL)
+    local rightX = self.gamepad:getGamepadAxis(Controls.GAMEPAD.AIM_AXES.HORIZONTAL)
+    local rightY = self.gamepad:getGamepadAxis(Controls.GAMEPAD.AIM_AXES.VERTICAL)
     
     -- If right stick is being used (outside deadzone), update aim direction
-    if math.abs(rightX) > CONTROLS.DEADZONE or math.abs(rightY) > CONTROLS.DEADZONE then
-        self:normalizeAim(rightX, rightY)
+    if rightX*rightX + rightY*rightY > Controls.DEADZONE*Controls.DEADZONE then
+        self.aimX, self.aimY = VecNormalize(rightX, rightY)
     end
     
-    -- Fire button
-    self.input.fire = self.gamepad:isGamepadDown(CONTROLS.GAMEPAD.FIRE)
+    -- Fire input
+    self.input.fire = self.gamepad:isGamepadDown(Controls.GAMEPAD.BUTTONS.FIRE)
 end
+
+
 
 -- Update aim direction from a point (used for mouse aiming)
 function Player:updateAimFromPoint(pointX, pointY)
@@ -200,19 +222,25 @@ end
 
 -- Normalize aim vector
 function Player:normalizeAim(x, y)
-    local length = math.sqrt(x * x + y * y)
-    
-    if length > 0 then
-        self.aimX = x / length
-        self.aimY = y / length
-        
-        -- Update facing direction based on aim
-        if self.aimX < 0 then
-            self.direction = -1
-        else
-            self.direction = 1
-        end
+    self.aimX, self.aimY = VecNormalize(x, y)
+end
+
+-- Update aim direction based on point
+function Player:updateAimFromPoint(targetX, targetY)
+    -- Get current position
+    local px, py = 0, 0
+    if self.collider then
+        px, py = self.collider:getPosition()
+    else
+        px, py = self.x, self.y
     end
+    
+    -- Calculate vector from player to point
+    local dx = targetX - px
+    local dy = targetY - py
+    
+    -- Normalize
+    self:normalizeAim(dx, dy)
 end
 
 -- Move based on input
@@ -400,6 +428,30 @@ function Player:draw()
         local points = {self.collider:getWorldPoints(self.collider:getShape():getPoints())}
         love.graphics.polygon("line", points)
     end
+    
+    -- Draw aim debug if enabled
+    if Debug.enabled and Debug.AIM and DEV.DEBUG_MASTER then
+        -- Get current position
+        local px, py = 0, 0
+        if self.collider then
+            px, py = self.collider:getPosition()
+        else
+            px, py = self.x, self.y
+        end
+        
+        -- Calculate aim point (32 pixels away from player)
+        local aimPointX = px + self.aimX * 32
+        local aimPointY = py + self.aimY * 32
+        
+        -- Draw circle at aim point
+        love.graphics.setColor(1, 0, 0, 0.7)
+        love.graphics.circle("line", aimPointX, aimPointY, 12)
+        
+        -- Draw crosshair at aim point
+        love.graphics.setColor(1, 1, 0, 0.9)
+        love.graphics.line(aimPointX - 4, aimPointY, aimPointX + 4, aimPointY)
+        love.graphics.line(aimPointX, aimPointY - 4, aimPointX, aimPointY + 4)
+    end
 end
 
 -- Draw debug visuals
@@ -439,7 +491,7 @@ end
 -- Handle key press
 function Player:keypressed(key)
     -- Toggle player debug (requires master debug to be on)
-    if key == CONTROLS.KEYBOARD.DEBUG.TOGGLE_PLAYER and love.keyboard.isDown("lshift", "rshift") then
+    if key == "f3" and love.keyboard.isDown("lshift", "rshift") then
         DEBUG_PLAYER = not DEBUG_PLAYER
         if DEV.DEBUG_MASTER then
             print("Player debug: " .. (DEBUG_PLAYER and "ON" or "OFF"))
