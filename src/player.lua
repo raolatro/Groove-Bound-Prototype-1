@@ -476,22 +476,31 @@ function Player:draw()
     -- No need to draw weapons here
     
     -- Debug visualization
-    if DEBUG_PLAYER and DEV.DEBUG_MASTER then
-        -- Get current position for debug visualizations
-        local x, y = self.x, self.y
-        if self.collider then
-            x, y = self.collider:getPosition()
-        end
-        
-        -- Draw aim direction
+    local x, y = self.x, self.y
+    if self.collider then
+        x, y = self.collider:getPosition()
+    end
+    
+    -- SEPARATE DEBUG FLAGS for different visualizations
+    -- Always use _G.DEBUG_* to get the most current debug flag values
+    
+    -- Draw aim direction only if DEBUG_MASTER is true AND DEBUG_AIM is true
+    if (_G.DEBUG_MASTER and _G.DEBUG_AIM) then
+        -- Draw aim direction with a clear, visible green line
         love.graphics.setColor(0, 1, 0, 0.7)
         love.graphics.line(
             x, y,
-            x + self.aimX * 40,
-            y + self.aimY * 40
+            x + self.aimX * 60, -- Make longer for better visibility
+            y + self.aimY * 60
         )
         
-        -- Draw velocity vector
+        -- Draw aim target point
+        love.graphics.setColor(1, 0, 0, 0.7)
+        love.graphics.circle("fill", x + self.aimX * 60, y + self.aimY * 60, 5)
+    end
+    
+    -- Draw velocity vector only if DEBUG_MASTER is true AND DEBUG_PLAYER is true
+    if (_G.DEBUG_MASTER and _G.DEBUG_PLAYER) then
         love.graphics.setColor(0, 0, 1, 0.7)
         love.graphics.line(
             x, y,

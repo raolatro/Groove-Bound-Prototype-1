@@ -5,10 +5,8 @@ local L = require("lib.loader")
 local PATHS = require("config.paths")
 local ItemDefs = require("src.data.item_defs")
 
--- Get reference to global Debug flags
--- These are defined in main.lua as globals
-local DEBUG_MASTER = _G.DEBUG_MASTER or false
-local DEBUG_UI = _G.DEBUG_UI or false
+-- We'll get the latest debug flags each time we draw, not store them in local variables
+-- This ensures we always use up-to-date debug settings from _G
 
 -- The InventoryGrid module
 local InventoryGrid = {
@@ -75,8 +73,8 @@ function InventoryGrid:draw()
     -- Get weapons from weapon system
     local weapons = self.weaponSystem.weapons
     
-    -- Draw inventory grid background if debug enabled
-    if DEBUG_MASTER and DEBUG_UI then
+    -- Draw inventory grid background if debug enabled (using global flags)
+    if _G.DEBUG_MASTER and _G.DEBUG_UI then
         love.graphics.setColor(0.1, 0.1, 0.2, 0.7)
         local totalWidth = (self.iconSize + self.padding) * 4 + self.padding
         local totalHeight = self.iconSize + self.padding * 2
@@ -122,8 +120,8 @@ function InventoryGrid:draw()
                 slotX + self.iconSize - 13, 
                 slotY + self.iconSize - 20)
             
-            -- Draw weapon name only if debug is EXPLICITLY enabled
-            if DEBUG_MASTER and DEBUG_UI then
+            -- Draw weapon name only if debug is EXPLICITLY enabled (using global flags)
+            if _G.DEBUG_MASTER and _G.DEBUG_UI then
                 love.graphics.setFont(self.smallFont)
                 love.graphics.setColor(1, 1, 1, 0.8)
                 love.graphics.printf(weapon.def.displayName, 
@@ -150,16 +148,16 @@ function InventoryGrid:draw()
                     self.barHeight)
             end
             
-            -- Display cooldown time ONLY if debug is EXPLICITLY enabled
-            if DEBUG_MASTER and DEBUG_UI and cooldownPct > 0 then
+            -- Display cooldown time ONLY if debug is EXPLICITLY enabled (using global flags)
+            if _G.DEBUG_MASTER and _G.DEBUG_UI and cooldownPct > 0 then
                 love.graphics.setFont(self.smallFont)
                 love.graphics.setColor(1, 1, 1, 0.8)
                 love.graphics.printf(string.format("%.1fs", weapon.cooldownTimer), 
                     slotX, slotY + self.iconSize - 15, self.iconSize, "center")
             end
         else
-            -- Draw empty slot indicator ONLY in explicit debug mode
-            if DEBUG_MASTER and DEBUG_UI then
+            -- Draw empty slot indicator ONLY in explicit debug mode (using global flags)
+            if _G.DEBUG_MASTER and _G.DEBUG_UI then
                 love.graphics.setFont(self.smallFont)
                 love.graphics.setColor(0.7, 0.7, 0.7, 0.5)
                 love.graphics.printf("Empty", 

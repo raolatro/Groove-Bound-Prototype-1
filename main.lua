@@ -2,10 +2,13 @@
 -- Initializes game systems and sets up the main loop
 
 -- Global Debug Flags
-DEBUG_MASTER = true
-DEBUG_WEAPONS = true
-DEBUG_HITBOXES = true
-DEBUG_UI = true
+-- These will be overridden by the Config.DEV values later
+-- Only need to define them here to avoid nil errors before Config is loaded
+DEBUG_MASTER = false
+DEBUG_WEAPONS = false
+DEBUG_HITBOXES = false
+DEBUG_UI = false
+DEBUG_AIM = false
 
 -- Load libraries
 local L = require("lib.loader")
@@ -13,6 +16,14 @@ local PATHS = require("config.paths")
 
 -- Load global configuration
 Config = require("config.settings") -- Only allowed global
+
+-- Initialize debug flags from Config.DEV settings to ensure consistency
+DEBUG_MASTER = Config.DEV.DEBUG_MASTER
+DEBUG_WEAPONS = Config.DEV.DEBUG_WEAPONS
+DEBUG_HITBOXES = Config.DEV.DEBUG_HITBOXES or false
+DEBUG_UI = Config.DEV.DEBUG_UI or false
+DEBUG_AIM = Config.DEV.DEBUG_AIM or false
+DEBUG_PROJECTILES = Config.DEV.DEBUG_PROJECTILES or false
 
 -- Load game states
 local GameStatePlay = require("src.game_play")

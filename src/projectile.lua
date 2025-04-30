@@ -9,17 +9,9 @@ local PATHS = require("config.paths")
 local DEV = Config.DEV
 local TUNING = Config.TUNING.PROJECTILES
 
--- Get references to global debug flags - force them to be true for maximum visibility
-local DEBUG_MASTER = true
-local DEBUG_WEAPONS = true
-
--- ALWAYS debug projectiles (overriding any global setting)
-local DEBUG_PROJECTILES = true
-
--- Make sure globals are set so other systems can see projectile debug messages
-_G.DEBUG_MASTER = DEBUG_MASTER
-_G.DEBUG_WEAPONS = DEBUG_WEAPONS
-_G.DEBUG_PROJECTILES = DEBUG_PROJECTILES
+-- Instead of storing debug flags as local variables, we'll always use the global _G versions
+-- This ensures we respect the current settings in Config.DEV and the debug hierarchy
+-- DO NOT override the global debug flags here - that would break the user's settings
 
 -- Object pool for projectiles
 local projectilePool = {}
@@ -145,7 +137,7 @@ function Projectile:get(x, y, vx, vy, damage, radius, sprite)
     -- Add to active projectiles list
     table.insert(activeProjectiles, proj)
     
-    if DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
+    if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
         print("Projectile activated at " .. x .. ", " .. y)
     end
     
@@ -161,7 +153,7 @@ function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, spr
     end
     
     -- Debug output for projectile spawning
-    if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+    if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
         local weaponName = "Unknown"
         local weaponLevel = 1
         if weaponInfo then
@@ -207,7 +199,7 @@ function Projectile:updateAll(dt)
         proj.y = proj.y + proj.vy * dt
         
         -- Debug position update
-        if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+        if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
             if math.random() < 0.01 then  -- Log only occasionally to avoid spam
                 print(string.format("PROJECTILE MOVE: ID=%d, Pos=(%d,%d), Vel=(%d,%d), dt=%.3f, Travel=%.1f", 
                     i, math.floor(proj.x), math.floor(proj.y), 
@@ -245,7 +237,7 @@ function Projectile:updateAll(dt)
             proj.y > screenHeight + margin
             
         -- Debug out of bounds
-        if outOfBounds and (DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS)) then
+        if outOfBounds and _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
             print(string.format("PROJECTILE OUT OF BOUNDS: ID=%d, Pos=(%d,%d), Screen=(%d,%d), Margin=%d",
                 i, math.floor(proj.x), math.floor(proj.y),
                 screenWidth, screenHeight, margin))
@@ -315,7 +307,7 @@ function Projectile:deactivate(index, reason)
     proj.isActive = false
     
     -- Debug deactivation with detailed info
-    if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+    if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
         reason = reason or "unknown"
         print(string.format("PROJECTILE DEACTIVATED: ID=%d, Reason=%s, Pos=(%d,%d), Lifetime=%.2fs, Distance=%.1f", 
             index, reason, 
@@ -330,7 +322,7 @@ end
 -- Draw all active projectiles
 function Projectile:drawAll()
     -- Debug header
-    if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+    if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
         if math.random() < 0.01 then  -- Log occasionally
             print(string.format("PROJECTILE DRAW: Active Count=%d", #activeProjectiles))
         end
@@ -370,7 +362,7 @@ function Projectile:drawAll()
                 love.graphics.circle("fill", proj.x, proj.y, radius)
                 
                 -- Add a trail in debug mode
-                if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+                if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
                     -- Draw a trailing line showing direction
                     local trailLength = 20
                     local backX = proj.x - (proj.vx / (proj.vx*proj.vx + proj.vy*proj.vy)^0.5) * trailLength
