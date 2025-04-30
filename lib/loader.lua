@@ -3,6 +3,9 @@
 
 local PATHS = require("config.paths")
 
+-- Load Debug early to make it globally accessible
+local Debug = require("dev.debug")
+
 local Loader = {
     -- HUMP libraries (Helper Utilities for Massive Productivity)
     Gamestate = require(PATHS.LIB.HUMP.GAMESTATE:gsub("%.lua$", "")),
@@ -16,6 +19,10 @@ local Loader = {
     -- Animation
     Anim8 = require(PATHS.LIB.ANIM8:gsub("%.lua$", ""))
 }
+
+-- Safe asset helper -------------------------------------------------------
+local AssetHelper = require("lib.asset_helper")
+Loader.Asset = AssetHelper        -- expose as Loader.Asset.*
 
 -- Initialize random number generator with seed
 Loader.RNG = love.math.newRandomGenerator(os.time())

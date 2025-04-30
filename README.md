@@ -8,12 +8,15 @@ A twin-stick survivor roguelike game built with LÖVE framework.
 /
 ├── assets/
 │   ├── fonts/
-│   │   └── press_start.ttf
+│   │   └── m6x11plus.ttf
 │   └── sprites/
-│       └── player_walk.png
+│       ├── player_walk.png
+│       ├── weapons/          - Weapon sprites
+│       └── projectiles/      - Projectile sprites
 ├── config/
 │   ├── paths.lua     - Centralized file path references
-│   └── settings.lua  - Game configuration (GAME, TUNING, DEV, CONTROLS)
+│   ├── settings.lua  - Game configuration (GAME, TUNING, DEV, CONTROLS)
+│   └── weapons.lua   - Weapon definitions and properties
 ├── lib/
 │   ├── anim8/        - Animation library
 │   ├── hump/         - Helper Utilities for Massive Productivity
@@ -21,7 +24,11 @@ A twin-stick survivor roguelike game built with LÖVE framework.
 │   └── loader.lua    - Centralized library management
 ├── src/
 │   ├── game_play.lua - Main game state
-│   └── player.lua    - Player entity with twin-stick movement
+│   ├── player.lua    - Player entity with twin-stick movement
+│   ├── projectile.lua - Projectile entity with object pooling
+│   ├── weapon_manager.lua - Manages player weapons
+│   └── weapons/
+│       └── base.lua  - Base weapon class
 ├── main.lua          - Entry point, wires everything together
 └── README.md         - This file
 ```
@@ -53,9 +60,66 @@ A twin-stick survivor roguelike game built with LÖVE framework.
 
 - Toggle Master Debug: F3 (shows hitboxes, enables console logs)
 - Toggle Player-only Debug: Shift+F3 (only works when master debug is on)
+- Toggle Weapons Debug: F4 (shows weapon hitboxes and stats)
+- Toggle Projectiles Debug: Shift+F4 (shows projectile hitboxes and pool stats)
 
 ## Development Notes
 
 - All game settings are centralized in `config/settings.lua`
 - The modular architecture allows for easy expansion
 - Debug flags in each module are gated by the master debug flag
+- During prototype phase debug overlay is always on; remove `_G.Debug.enabled` default or reintroduce keybind later.
+- Camera.lag setting (0-1): 0 = instant snap, 1 = no movement. Default 0.15 provides smooth following.
+- Collider size derives from GRID.base; change grid, collider auto-scales.
+- Debug overlay now uses system font in red; change size via Debug.font = love.graphics.newFont(size).
+
+## Weapon System
+
+### Adding New Weapons
+
+To add a new weapon, simply add a new entry to `config/weapons.lua`. Each weapon definition requires:
+
+```lua
+newWeapon = {
+    id = "unique_id",         -- Unique identifier
+    name = "Display Name",     -- Shown in UI
+    slot = "sidearm",          -- Equip slot (sidearm, primary, special, etc.)
+    category = CATEGORIES.PISTOL, -- Weapon category for evolution
+    damage = 10,                 -- Base damage
+    cooldown = 0.4,              -- Seconds between shots
+    projectileSpeed = 600,       -- Projectile velocity
+    projectileCount = 1,         -- Bullets per shot
+    spread = 0.05,               -- Shot dispersion in radians
+    area = 5,                    -- Projectile hitbox radius
+    sprite = PATHS.ASSETS.SPRITES.WEAPONS.PISTOL, -- Weapon sprite path
+    projectileSprite = PATHS.ASSETS.SPRITES.PROJECTILES.BULLET, -- Projectile sprite
+    sfx = PATHS.ASSETS.AUDIO.SFX.WEAPONS.PISTOL,  -- Sound effect
+    
+    -- Category-specific attributes (optional)
+    catAttrib = {
+        clipSize = 8,           -- Example: pistol-specific
+        reloadTime = 1.0
+    },
+    
+    -- Weapon-specific attributes (optional)
+    weaponAttrib = {
+        accuracy = 0.9,         -- Example: this specific gun
+        critChance = 0.05       -- 5% critical hit chance
+    }
+}
+```
+
+### Projectile Pooling
+
+The game uses object pooling for projectiles to improve performance:
+
+- Projectiles are recycled when they go off-screen or exceed their lifetime
+- The pool size is controlled by `TUNING.PROJECTILES.POOL_MAX_PROJECTILES` in settings.lua
+- When a projectile is "destroyed", it's simply deactivated (`isActive = false`) and returned to the pool
+- If the pool is full, the oldest active projectile is recycled
+
+### Test Controls
+
+- Press SPACE to add a test pistol weapon
+- F4 to toggle weapon debug visualization
+- Shift+F4 to toggle projectile debug visualization

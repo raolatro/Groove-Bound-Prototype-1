@@ -33,20 +33,37 @@ local Config = {
             FIRE_COOLDOWN = 0.25  -- seconds between shots
         },
         CAMERA = {
-            LERP_FACTOR = 0.1,
-            SHAKE_DURATION = 0.2,
-            SHAKE_INTENSITY = 5
+            LERP_FACTOR = 0.5, -- Linear interpolation factor for smooth following
+            SHAKE_DURATION = 0.2, -- Duration of screen shake in seconds
+            SHAKE_INTENSITY = 5 -- Intensity of screen shake
+        },
+        PROJECTILES = {
+            POOL_MAX_PROJECTILES = 200,  -- Maximum number of projectiles in the pool
+            SCREEN_MARGIN = 100,         -- Extra pixels beyond screen to despawn projectiles
+            DEFAULT_LIFETIME = 5          -- Default lifetime in seconds if not otherwise specified
+        },
+        WEAPONS = {
+            MAX_PLAYER_WEAPONS = 6,      -- Maximum number of weapons a player can have
+            ACQUIRE_COOLDOWN = 0.5,       -- Cooldown before another weapon can be acquired
+            DEFAULT_COOLDOWN = 0.5        -- Default cooldown if not specified in weapon def
         }
     },
     
     -- Development settings
     DEV = {
-        DEBUG_MASTER = false,      -- Global debug toggle (F3)
-        DEBUG_PLAYER = false,      -- Player-specific debug toggle (Shift+F3)
-        DEBUG_PHYSICS = false,     -- Physics debug toggle
-        DEBUG_FPS = true,          -- Show FPS counter
-        INVINCIBLE = false,        -- Player invincibility for testing
-        LOG_LEVEL = "info"         -- log, info, warn, error
+        DEBUG_MASTER = true,      -- Always on during prototype phase
+        DEBUG_PLAYER = true,      -- Player-specific debug toggle (Shift+F3)
+        DEBUG_PHYSICS = true,     -- Physics debug toggle
+        DEBUG_ASSETS = true,      -- Asset debug toggle
+        DEBUG_WEAPONS = true,     -- Weapons debug toggle (F4)
+        DEBUG_PROJECTILES = true, -- Projectiles debug toggle (Shift+F4)
+        DEBUG_GRID = true,        -- Grid debug toggle
+        DEBUG_WALLS = true,       -- Walls debug toggle
+        DEBUG_CAMERA = true,      -- Camera debug (always on)
+        DEBUG_COLLISION = true,   -- Collision debug (always on)
+        DEBUG_FPS = true,         -- Show FPS counter
+        INVINCIBLE = true,        -- Player invincibility for testing
+        LOG_LEVEL = "info"        -- log, info, warn, error
     },
     
     -- Control mapping
@@ -62,7 +79,13 @@ local Config = {
             PAUSE = "escape",
             DEBUG = {
                 TOGGLE_MASTER = "f3",
-                TOGGLE_PLAYER = "f3" -- With shift modifier
+                TOGGLE_PLAYER = "f3", -- With shift modifier
+                TOGGLE_ASSETS = "f5",
+                TOGGLE_GRID = "f5",   -- Without shift modifier
+                TOGGLE_WALLS = "f6",
+                TOGGLE_DEBUG_CLEAR = "f9", -- Clear debug messages
+                TOGGLE_WEAPONS = "f4",
+                TOGGLE_PROJECTILES = "f4" -- With shift modifier
             }
         },
         GAMEPAD = {

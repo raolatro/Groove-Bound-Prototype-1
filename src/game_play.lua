@@ -4,7 +4,16 @@
 local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
+local UI = require("config.ui")
 local Player = require("src.player")
+local Projectile = require("src.projectile")
+local Camera = require("lib.camera")
+local Arena = require("src.arena")
+local WallManager = require("src.wall_manager")
+local WeaponManager = require("src.weapon_manager")
+
+-- Get global Debug instance
+local Debug = _G.Debug
 
 -- Shorthand for readability
 local GAME = Config.GAME
@@ -13,9 +22,15 @@ local DEV = Config.DEV
 -- Create gamestate
 local GamePlay = {}
 
+-- Local instances
+local camera = nil
+
 -- Initialize state
 function GamePlay:init()
     -- Physics world initialization
+    if self.world then
+        self.world:destroy()
+    end
     self.world = L.Windfield.newWorld(0, 0, true)
     
     -- Game state
@@ -30,13 +45,40 @@ function GamePlay:enter()
     -- Create player in the center of the screen
     local centerX = love.graphics.getWidth() / 2
     local centerY = love.graphics.getHeight() / 2
-    self.player = Player:new(centerX, centerY)
+    
+    -- Initialize arena
+    self.arena = Arena
+    self.arena:init(self.world)
+    
+    -- Initialize obstacles
+    self.wallManager = WallManager
+    self.wallManager:spawn(UI.ARENA.obstacleCount, self.world, os.time())
+    
+    -- Initialize player in the center of the arena
+    self.player = Player:new(UI.ARENA.w / 2, UI.ARENA.h / 2, self.world)
     
     -- TODO: Initialize enemies, pickups, etc.
 end
 
 -- Update logic
 function GamePlay:update(dt)
+    -- Initialize camera if not already created
+    if not camera then
+        camera = Camera:new(UI.ARENA.w, UI.ARENA.h)
+    end
+    
+    -- Update camera to follow player (get position from collider)
+    local targetX, targetY = 0, 0
+    if self.player.collider then
+        targetX, targetY = self.player.collider:getPosition()
+    else
+        targetX, targetY = self.player.x, self.player.y
+    end
+    camera:update(dt, targetX, targetY)
+    
+    -- Update debug messages
+    Debug.update(dt)
+    
     -- Skip update if paused
     if self.isPaused then return end
     
@@ -46,13 +88,25 @@ function GamePlay:update(dt)
     -- Update player
     self.player:update(dt)
     
+    -- Update wall manager
+    self.wallManager:update(dt)
+    
     -- TODO: Update other game elements (enemies, projectiles, etc.)
 end
 
 -- Draw the game
 function GamePlay:draw()
     -- Clear screen
-    love.graphics.clear(0.1, 0.1, 0.15)
+    love.graphics.clear(0.05, 0.05, 0.1)
+    
+    -- Camera transformation start
+    if camera then
+        camera:attach()
+    end
+    
+    -- Draw arena
+    self.arena:draw()
+    self.wallManager:draw()
     
     -- Draw player
     self.player:draw()
@@ -61,6 +115,14 @@ function GamePlay:draw()
     if DEV.DEBUG_PHYSICS and DEV.DEBUG_MASTER then
         self.world:draw()
     end
+
+    -- Camera transformation end
+    if camera then
+        camera:detach()
+    end
+    
+    -- Draw debug messages (outside camera transform)
+    Debug.draw()
     
     -- Draw pause overlay
     if self.isPaused then
@@ -118,7 +180,19 @@ function GamePlay:keypressed(key)
     -- Forward keypresses to player when not paused
     if not self.isPaused then
         self.player:keypressed(key)
+        WeaponManager:keypressed(key)
+        Projectile:keypressed(key)
     end
+    
+    -- Forward to arena and wall systems
+    self.arena:keypressed(key)
+    self.wallManager:keypressed(key)
+    
+    -- Forward to debug system (for F9 clear logs)
+    Debug.keypressed(key)
+    
+    -- Forward to camera (no toggles, but might have other functions)
+    if camera then camera:keypressed(key) end
 end
 
 -- Handle mouse press
@@ -131,7 +205,11 @@ end
 
 -- Handle window resize
 function GamePlay:resize(w, h)
-    -- TODO: Handle camera and UI adjustments on resize
+    -- Update camera viewport if it exists
+    if camera then
+        camera.viewportWidth = w
+        camera.viewportHeight = h
+    end
 end
 
 -- Clean up when leaving the state
