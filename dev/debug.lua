@@ -14,7 +14,8 @@ local Debug = {
     displayTime = 10,      -- Time each message stays on screen (seconds)
     font = nil,            -- Debug font (system font)
     enabled = true,        -- Always enabled during prototype phase
-    AIM = true             -- Draw aim crosshair and circle
+    AIM = true,            -- Draw aim crosshair and circle
+    INPUT = true           -- Log input mode changes
 }
 
 -- Log a message to the debug display

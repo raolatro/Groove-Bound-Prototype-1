@@ -4,6 +4,8 @@
 local Controls = {
     -- Analog stick deadzone (0.0 to 1.0)
     DEADZONE = 0.25,
+    -- Input mode (pad, mouse)
+    inputMode = "pad",
     
     -- Movement keys
     KEYBOARD = {

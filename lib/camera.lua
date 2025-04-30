@@ -65,7 +65,7 @@ function Camera:update(dt, targetX, targetY)
         self.debugTimer = (self.debugTimer or 0) - dt
         if self.debugTimer <= 0 then
             self.debugTimer = 1 -- Reset to 1 second
-            Debug.log("Camera target " .. self.targetX .. "," .. self.targetY)
+            -- Debug.log("Camera target " .. self.targetX .. "," .. self.targetY)
         end
     end
     

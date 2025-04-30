@@ -5,6 +5,7 @@ local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
 local UI = require("config.ui")
+local Controls = require("config.controls")
 local Player = require("src.player")
 local Projectile = require("src.projectile")
 local Camera = require("lib.camera")
@@ -63,9 +64,11 @@ end
 -- Update logic
 function GamePlay:update(dt)
     -- Initialize camera if not already created
-    if not camera then
-        camera = Camera:new(UI.ARENA.w, UI.ARENA.h)
+    if not _G.camera then
+        _G.camera = Camera:new(UI.ARENA.w, UI.ARENA.h)
     end
+    -- Store camera reference for gameplay state access
+    self.camera = _G.camera
     
     -- Update camera to follow player (get position from collider)
     local targetX, targetY = 0, 0
@@ -74,7 +77,7 @@ function GamePlay:update(dt)
     else
         targetX, targetY = self.player.x, self.player.y
     end
-    camera:update(dt, targetX, targetY)
+    _G.camera:update(dt, targetX, targetY)
     
     -- Update debug messages
     Debug.update(dt)
@@ -100,8 +103,8 @@ function GamePlay:draw()
     love.graphics.clear(0.05, 0.05, 0.1)
     
     -- Camera transformation start
-    if camera then
-        camera:attach()
+    if _G.camera then
+        _G.camera:attach()
     end
     
     -- Draw arena
@@ -117,8 +120,8 @@ function GamePlay:draw()
     end
 
     -- Camera transformation end
-    if camera then
-        camera:detach()
+    if _G.camera then
+        _G.camera:detach()
     end
     
     -- Draw debug messages (outside camera transform)
@@ -190,6 +193,15 @@ function GamePlay:keypressed(key)
     
     -- Forward to debug system (for F9 clear logs)
     Debug.keypressed(key)
+    
+    -- Toggle input mode on F10 (direct toggle between pad and mouse)
+    if key == "f10" then
+        -- Simple toggle between pad and mouse
+        Controls.inputMode = (Controls.inputMode == "pad") and "mouse" or "pad"
+        if Debug.enabled and Debug.INPUT then 
+            Debug.log("[toggle] Input mode: " .. Controls.inputMode)
+        end
+    end
     
     -- Forward to camera (no toggles, but might have other functions)
     if camera then camera:keypressed(key) end

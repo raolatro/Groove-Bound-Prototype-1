@@ -38,13 +38,20 @@ Player.__index = Player
 function Player:new(x, y, world)
     -- Create instance
     local instance = {
-        -- Position and physics
+        -- Position
         x = x or 0,
         y = y or 0,
+        -- Velocity
         vx = 0,
         vy = 0,
+        -- Physics body
+        collider = nil,
+        -- Speed
         speed = TUNING.MOVE_SPEED,
-        world = world,  -- Physics world reference
+        -- Sprite
+        spriteSheet = nil,
+        currentAnimation = nil,
+        currentFrame = nil,
         -- Dimensions
         width = TUNING.SPRITE_SIZE,
         height = TUNING.SPRITE_SIZE,
@@ -68,6 +75,9 @@ function Player:new(x, y, world)
         },
         -- Gamepad reference if available
         gamepad = nil,
+        -- Analog stick values for combined movement
+        stickX = 0,
+        stickY = 0,
         -- Hit area for debug visualization
         hitbox = {
             x = x or 0,
@@ -100,7 +110,7 @@ function Player:new(x, y, world)
         instance.collider:setPreSolve(function(collider_1, collider_2, contact)
             if collider_2.collision_class == "environment" then
                 if DEV.DEBUG_COLLISION and DEV.DEBUG_MASTER and Debug.enabled then
-                    Debug.log("Wall bump")
+                    -- Debug.log("Wall bump")
                 end
             end
         end)
@@ -151,35 +161,89 @@ function Player:checkGamepad()
     end
 end
 
--- Process keyboard input
+-- Helper function to log when input modes change - for debugging only
+local function logInputModeChange(mode)
+    if DEV.DEBUG_MASTER and Debug.enabled and Debug.INPUT then
+        Debug.log("[" .. mode .. "] Using " .. mode .. " controls")
+    end
+end
+
+-- Read mouse aim vector
+function Player:readMouseAim()
+    -- Get mouse position
+    local mouseX, mouseY = love.mouse.getPosition()
+    
+    -- Get current player position
+    local px, py = 0, 0
+    if self.collider then
+        px, py = self.collider:getPosition()
+    else
+        px, py = self.x, self.y
+    end
+    
+    -- Convert screen to world coordinates
+    if _G.camera then
+        -- Convert screen to world coordinates
+        mouseX, mouseY = _G.camera:screenToWorld(mouseX, mouseY)
+        
+        -- Calculate aim vector from player to mouse world position
+        local dx = mouseX - px
+        local dy = mouseY - py
+        
+        -- Always normalize and update - no dead zone for mouse
+        self.aimX, self.aimY = VecNormalize(dx, dy)
+        
+        if DEV.DEBUG_MASTER and Debug.enabled and Debug.AIM then
+            -- Debug.log("Aim updated from mouse")
+        end
+    end
+end
+
+-- Process keyboard input for movement
 function Player:processKeyboardInput()
-    -- Movement keys
-    self.input.up = love.keyboard.isDown(Controls.KEYBOARD.UP)
-    self.input.down = love.keyboard.isDown(Controls.KEYBOARD.DOWN)
-    self.input.left = love.keyboard.isDown(Controls.KEYBOARD.LEFT)
-    self.input.right = love.keyboard.isDown(Controls.KEYBOARD.RIGHT)
+    -- Movement keys - WASD and arrow keys (will be combined in move() method)
+    self.input.up = love.keyboard.isDown('w', 'up')
+    self.input.down = love.keyboard.isDown('s', 'down')
+    self.input.left = love.keyboard.isDown('a', 'left')
+    self.input.right = love.keyboard.isDown('d', 'right')
     
     -- Fire input
     self.input.fire = love.keyboard.isDown(Controls.KEYBOARD.FIRE)
     
-    -- Mouse aiming - convert to world coordinates
-    local mouseX, mouseY = love.mouse.getPosition()
+    -- Mouse aiming is now handled separately in readMouseAim()
+    -- This allows for proper input mode handling
+end
+
+-- Read gamepad aim from right stick
+function Player:readPadAim()
+    -- Skip if no gamepad available
+    if #love.joystick.getJoysticks() == 0 or not self.gamepad then return end
     
-    -- Get current camera module from GameStatePlay
-    -- We need to translate screen coordinates to world coordinates
-    local gameState = L.Gamestate.current()
-    if gameState and gameState.camera then
-        -- Convert screen to world coordinates
-        mouseX, mouseY = gameState.camera:screenToWorld(mouseX, mouseY)
+    -- Get right stick for aiming
+    local rightX = self.gamepad:getGamepadAxis(Controls.GAMEPAD.AIM_AXES.HORIZONTAL)
+    local rightY = self.gamepad:getGamepadAxis(Controls.GAMEPAD.AIM_AXES.VERTICAL)
+    
+    -- Calculate stick magnitude
+    local magnitude = rightX*rightX + rightY*rightY
+    
+    -- If right stick is being used (outside deadzone), update aim direction
+    -- Otherwise, keep previous aim direction (persistence)
+    if magnitude > Controls.DEADZONE*Controls.DEADZONE then
+        local prevX, prevY = self.aimX, self.aimY
+        self.aimX, self.aimY = VecNormalize(rightX, rightY)
         
-        -- Update aim based on world position
-        self:updateAimFromPoint(mouseX, mouseY)
+        if DEV.DEBUG_MASTER and Debug.enabled and Debug.AIM then
+            if math.abs(prevX - self.aimX) > 0.01 or math.abs(prevY - self.aimY) > 0.01 then
+                -- Debug.log("Aim updated from stick")
+            end
+        end
     end
 end
 
--- Process gamepad input
+-- Process gamepad input for movement
 function Player:processGamepadInput()
-    if not self.gamepad then return end
+    -- Guard against no gamepad or no joysticks
+    if #love.joystick.getJoysticks() == 0 or not self.gamepad then return end
     
     -- Get left stick for movement
     local leftX = self.gamepad:getGamepadAxis(Controls.GAMEPAD.MOVE_AXES.HORIZONTAL)
@@ -190,22 +254,20 @@ function Player:processGamepadInput()
     if math.abs(leftY) < Controls.DEADZONE then leftY = 0 end
     
     -- Set input flags based on analog values
-    self.input.left = leftX < -Controls.DEADZONE
-    self.input.right = leftX > Controls.DEADZONE
-    self.input.up = leftY < -Controls.DEADZONE
-    self.input.down = leftY > Controls.DEADZONE
+    self.input.left = self.input.left or leftX < -Controls.DEADZONE
+    self.input.right = self.input.right or leftX > Controls.DEADZONE
+    self.input.up = self.input.up or leftY < -Controls.DEADZONE
+    self.input.down = self.input.down or leftY > Controls.DEADZONE
     
-    -- Get right stick for aiming
-    local rightX = self.gamepad:getGamepadAxis(Controls.GAMEPAD.AIM_AXES.HORIZONTAL)
-    local rightY = self.gamepad:getGamepadAxis(Controls.GAMEPAD.AIM_AXES.VERTICAL)
-    
-    -- If right stick is being used (outside deadzone), update aim direction
-    if rightX*rightX + rightY*rightY > Controls.DEADZONE*Controls.DEADZONE then
-        self.aimX, self.aimY = VecNormalize(rightX, rightY)
-    end
+    -- Store stick movement values for combining with keyboard
+    self.stickX = leftX
+    self.stickY = leftY
     
     -- Fire input
     self.input.fire = self.gamepad:isGamepadDown(Controls.GAMEPAD.BUTTONS.FIRE)
+    
+    -- Right stick aiming is now handled separately in readPadAim()
+    -- This allows for proper input mode handling
 end
 
 
@@ -245,43 +307,48 @@ end
 
 -- Move based on input
 function Player:move(dt)
-    -- Reset velocity
-    local vx, vy = 0, 0
+    -- Get keyboard input movement vector
+    local mvx, mvy = 0, 0
+    if self.input.left then mvx = mvx - 1 end
+    if self.input.right then mvx = mvx + 1 end
+    if self.input.up then mvy = mvy - 1 end
+    if self.input.down then mvy = mvy + 1 end
     
-    -- Apply velocity based on input
-    if self.input.left then
-        vx = vx - 1
-        self.direction = -1
+    -- Add gamepad stick input if available
+    if self.stickX and self.stickY then
+        mvx = mvx + self.stickX
+        mvy = mvy + self.stickY
     end
-    if self.input.right then
-        vx = vx + 1
+    
+    -- Update facing direction based on input
+    if mvx < 0 then
+        self.direction = -1
+    elseif mvx > 0 then
         self.direction = 1
     end
-    if self.input.up then vy = vy - 1 end
-    if self.input.down then vy = vy + 1 end
     
     -- Normalize diagonal movement
-    if vx ~= 0 and vy ~= 0 then
-        local length = math.sqrt(vx * vx + vy * vy)
-        vx = vx / length
-        vy = vy / length
+    if mvx ~= 0 or mvy ~= 0 then
+        local length = math.sqrt(mvx * mvx + mvy * mvy)
+        mvx = mvx / length
+        mvy = mvy / length
+        
+        -- Apply speed
+        mvx = mvx * self.speed
+        mvy = mvy * self.speed
     end
     
-    -- Apply speed
-    vx = vx * self.speed
-    vy = vy * self.speed
-    
     -- Store velocity
-    self.vx = vx
-    self.vy = vy
+    self.vx = mvx
+    self.vy = mvy
     
     -- Update movement state
-    self.isMoving = (vx ~= 0 or vy ~= 0)
+    self.isMoving = (mvx ~= 0 or mvy ~= 0)
     
     -- For non-physics movement (we don't use this now but keeping for compatibility)
     if not self.collider then
-        self.x = self.x + (vx * dt)
-        self.y = self.y + (vy * dt)
+        self.x = self.x + (mvx * dt)
+        self.y = self.y + (mvy * dt)
     end
 end
 
@@ -320,9 +387,27 @@ function Player:update(dt)
         self:checkGamepad()
     end
     
-    -- Process input based on available devices
-    self:processKeyboardInput()
+    -- Reset input state for this frame
+    self.input.up = false
+    self.input.down = false
+    self.input.left = false
+    self.input.right = false
+    self.input.fire = false
+    self.stickX = 0
+    self.stickY = 0
+    
+    -- Process movement input based on available devices
+    -- Order matters: keyboard can override gamepad for movement
     self:processGamepadInput()
+    self:processKeyboardInput()
+    
+    -- Process aim input exclusively based on current input mode
+    if Controls.inputMode == "pad" then
+        self:readPadAim()
+    end
+    if Controls.inputMode == "mouse" then
+        self:readMouseAim()
+    end
     
     -- Apply movement (updates velocity based on input)
     self:move(dt)
