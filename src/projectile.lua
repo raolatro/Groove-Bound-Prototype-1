@@ -9,8 +9,17 @@ local PATHS = require("config.paths")
 local DEV = Config.DEV
 local TUNING = Config.TUNING.PROJECTILES
 
--- Local debug flag, ANDed with master debug
-local DEBUG_PROJECTILES = false
+-- Get references to global debug flags - force them to be true for maximum visibility
+local DEBUG_MASTER = true
+local DEBUG_WEAPONS = true
+
+-- ALWAYS debug projectiles (overriding any global setting)
+local DEBUG_PROJECTILES = true
+
+-- Make sure globals are set so other systems can see projectile debug messages
+_G.DEBUG_MASTER = DEBUG_MASTER
+_G.DEBUG_WEAPONS = DEBUG_WEAPONS
+_G.DEBUG_PROJECTILES = DEBUG_PROJECTILES
 
 -- Object pool for projectiles
 local projectilePool = {}
@@ -143,6 +152,49 @@ function Projectile:get(x, y, vx, vy, damage, radius, sprite)
     return proj
 end
 
+-- Spawn a projectile (alias for get method to maintain compatibility)
+function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, sprite, weaponInfo)
+    -- Parameter validation
+    if not (x and y and vx and vy) then
+        print("ERROR: Projectile spawn missing position or velocity parameters")
+        return nil
+    end
+    
+    -- Debug output for projectile spawning
+    if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+        local weaponName = "Unknown"
+        local weaponLevel = 1
+        if weaponInfo then
+            weaponName = weaponInfo.name or "Unknown"
+            weaponLevel = weaponInfo.level or 1
+        end
+        
+        print(string.format("PROJECTILE SPAWN: Weapon=%s, Level=%d, Pos=(%d,%d), Vel=(%d,%d), Damage=%d, Lifetime=%d", 
+            weaponName, weaponLevel, math.floor(x), math.floor(y), math.floor(vx), math.floor(vy), damage, maxLifetime))
+    end
+    
+    -- Initialize defaults
+    damage = damage or 10
+    radius = radius or 5
+    maxLifetime = maxLifetime or 2
+    
+    -- Convert colour to sprite if provided
+    local spriteToUse = sprite
+    if not sprite and colour then
+        -- In future we might create a colored sprite here
+        -- For now just use the color later in draw
+    end
+    
+    -- Use the get method to create the projectile
+    local proj = self:get(x, y, vx, vy, damage, radius, spriteToUse)
+    
+    -- Set additional properties
+    proj.maxLifetime = maxLifetime
+    proj.colour = colour or {1, 1, 1, 1}
+    
+    return proj
+end
+
 -- Update all active projectiles
 function Projectile:updateAll(dt)
     local i = 1
@@ -154,24 +206,55 @@ function Projectile:updateAll(dt)
         proj.x = proj.x + proj.vx * dt
         proj.y = proj.y + proj.vy * dt
         
+        -- Debug position update
+        if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+            if math.random() < 0.01 then  -- Log only occasionally to avoid spam
+                print(string.format("PROJECTILE MOVE: ID=%d, Pos=(%d,%d), Vel=(%d,%d), dt=%.3f, Travel=%.1f", 
+                    i, math.floor(proj.x), math.floor(proj.y), 
+                    math.floor(proj.vx), math.floor(proj.vy), 
+                    dt, proj.distance or 0))
+            end
+        end
+        
         -- Update lifetime and traveled distance
         proj.lifetime = proj.lifetime + dt
-        local dx = proj.x - oldX
-        local dy = proj.y - oldY
-        proj.distance = proj.distance + math.sqrt(dx * dx + dy * dy)
+        local distanceTraveled = math.sqrt((proj.x - oldX)^2 + (proj.y - oldY)^2)
+        proj.distance = proj.distance + distanceTraveled
         
         -- Update hit area
         proj.hitArea.x = proj.x
         proj.hitArea.y = proj.y
         
-        -- Check if out of bounds
-        local margin = TUNING.SCREEN_MARGIN
+        -- Check if projectile should be removed
+        local shouldDeactivate = false
+        
+        -- Check if projectile exceeds maxLifetime (if set)
+        local deactivateReason = nil
+        if proj.maxLifetime and proj.lifetime >= proj.maxLifetime then
+            shouldDeactivate = true
+            deactivateReason = "lifetime_exceeded"
+        end
+        
+        -- Check if out of bounds (using a much larger margin to let projectiles travel further)
+        local margin = 2000  -- Very large margin to ensure projectiles can travel across the entire arena
         local screenWidth, screenHeight = love.graphics.getDimensions()
         local outOfBounds = 
             proj.x < -margin or 
             proj.y < -margin or 
             proj.x > screenWidth + margin or 
             proj.y > screenHeight + margin
+            
+        -- Debug out of bounds
+        if outOfBounds and (DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS)) then
+            print(string.format("PROJECTILE OUT OF BOUNDS: ID=%d, Pos=(%d,%d), Screen=(%d,%d), Margin=%d",
+                i, math.floor(proj.x), math.floor(proj.y),
+                screenWidth, screenHeight, margin))
+        end
+            
+        if outOfBounds then
+            shouldDeactivate = true
+            deactivateReason = deactivateReason or "out_of_bounds"
+        end
         
         -- Check if max range exceeded
         local rangeExceeded = false
@@ -186,17 +269,36 @@ function Projectile:updateAll(dt)
                 
                 if proj.distance > falloffStart then
                     local falloffFactor = (proj.distance - falloffStart) / fadeDistance
-                    proj.damage = proj.damage * (1 - falloffFactor * proj.rangeFalloff)
+                    local fadePercentage = 1 - falloffFactor * proj.rangeFalloff
+                    
+                    -- Apply damage falloff based on distance
+                    proj.damage = proj.damage * fadePercentage
+                    
+                    -- Last part: actually check if we need to deactivate
+                    if fadePercentage <= 0 then
+                        shouldDeactivate = true
+                        deactivateReason = deactivateReason or "range_falloff"
+                    end
                 end
+            else
+                -- If range exceeded and no falloff, deactivate
+                shouldDeactivate = true
+                deactivateReason = deactivateReason or "range_exceeded"
             end
         end
         
-        -- Check if lifetime exceeded
-        local lifetimeExceeded = proj.lifetime > TUNING.DEFAULT_LIFETIME
+        -- Check lifetime exceeded (for additional lifetime checks beyond maxLifetime)
+        local lifetimeExceeded = false
+        -- TODO: Add lifetime cap check if needed
+        
+        if lifetimeExceeded then
+            shouldDeactivate = true
+            deactivateReason = deactivateReason or "extra_lifetime_check"
+        end
         
         -- Deactivate if necessary
-        if outOfBounds or rangeExceeded or lifetimeExceeded then
-            self:deactivate(i)
+        if shouldDeactivate then
+            self:deactivate(i, deactivateReason)
         else
             i = i + 1
         end
@@ -204,23 +306,37 @@ function Projectile:updateAll(dt)
 end
 
 -- Deactivate a projectile
-function Projectile:deactivate(index)
+function Projectile:deactivate(index, reason)
     if not activeProjectiles[index] then return end
     
+    local proj = activeProjectiles[index]
+    
     -- Mark as inactive
-    activeProjectiles[index].isActive = false
+    proj.isActive = false
+    
+    -- Debug deactivation with detailed info
+    if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+        reason = reason or "unknown"
+        print(string.format("PROJECTILE DEACTIVATED: ID=%d, Reason=%s, Pos=(%d,%d), Lifetime=%.2fs, Distance=%.1f", 
+            index, reason, 
+            math.floor(proj.x or 0), math.floor(proj.y or 0),
+            proj.lifetime or 0, proj.distance or 0))
+    end
     
     -- Remove from active list
     table.remove(activeProjectiles, index)
-    
-    if DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
-        print("Projectile deactivated")
-    end
 end
 
 -- Draw all active projectiles
 function Projectile:drawAll()
-    for _, proj in ipairs(activeProjectiles) do
+    -- Debug header
+    if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+        if math.random() < 0.01 then  -- Log occasionally
+            print(string.format("PROJECTILE DRAW: Active Count=%d", #activeProjectiles))
+        end
+    end
+    
+    for i, proj in ipairs(activeProjectiles) do
         if proj.isActive then
             -- Draw sprite if available
             if proj.spriteImg then
@@ -240,9 +356,29 @@ function Projectile:drawAll()
                     proj.spriteImg:getHeight() / 2
                 )
             else
-                -- Fallback: draw a circle
-                love.graphics.setColor(1, 0.8, 0, 1)
-                love.graphics.circle("fill", proj.x, proj.y, proj.radius)
+                -- Fallback: draw a circle using projectile color
+                if proj.colour then
+                    -- Use the weapon-defined color
+                    love.graphics.setColor(proj.colour[1], proj.colour[2], proj.colour[3], 1)
+                else
+                    -- Default yellow fallback if no color defined
+                    love.graphics.setColor(1, 0.8, 0, 1)
+                end
+                
+                -- Make projectiles larger and add trails for better visibility
+                local radius = proj.radius * 2  -- Double the radius for better visibility
+                love.graphics.circle("fill", proj.x, proj.y, radius)
+                
+                -- Add a trail in debug mode
+                if DEBUG_PROJECTILES or (DEBUG_MASTER and DEBUG_WEAPONS) then
+                    -- Draw a trailing line showing direction
+                    local trailLength = 20
+                    local backX = proj.x - (proj.vx / (proj.vx*proj.vx + proj.vy*proj.vy)^0.5) * trailLength
+                    local backY = proj.y - (proj.vy / (proj.vx*proj.vx + proj.vy*proj.vy)^0.5) * trailLength
+                    
+                    love.graphics.setColor(proj.colour[1], proj.colour[2], proj.colour[3], 0.5)
+                    love.graphics.line(proj.x, proj.y, backX, backY)
+                end
             end
         end
     end

@@ -11,7 +11,7 @@ local Projectile = require("src.projectile")
 local Camera = require("lib.camera")
 local Arena = require("src.arena")
 local WallManager = require("src.wall_manager")
-local WeaponManager = require("src.weapon_manager")
+local GameSystems = require("src.systems.game_systems")
 
 -- Get global Debug instance
 local Debug = _G.Debug
@@ -58,6 +58,17 @@ function GamePlay:enter()
     -- Initialize player in the center of the arena
     self.player = Player:new(UI.ARENA.w / 2, UI.ARENA.h / 2, self.world)
     
+    -- Make sure projectile system is initialized first
+    Projectile:initPool()
+    
+    -- Initialize game systems (weapons, passives, inventory)
+    self.gameSystems = GameSystems:init(self.player)
+    
+    -- Print debug message about initialization
+    if DEBUG_MASTER and DEBUG_WEAPONS then
+        print("Gameplay initialized - Projectile system and weapon systems ready")
+    end
+    
     -- TODO: Initialize enemies, pickups, etc.
 end
 
@@ -94,6 +105,11 @@ function GamePlay:update(dt)
     -- Update wall manager
     self.wallManager:update(dt)
     
+    -- Update game systems
+    if self.gameSystems then
+        self.gameSystems:update(dt)
+    end
+    
     -- TODO: Update other game elements (enemies, projectiles, etc.)
 end
 
@@ -111,8 +127,17 @@ function GamePlay:draw()
     self.arena:draw()
     self.wallManager:draw()
     
+    -- Draw projectiles
+    -- This must be done inside the camera transformation
+    Projectile:drawAll()
+    
     -- Draw player
     self.player:draw()
+    
+    -- Only draw non-UI game systems inside camera transform
+    if self.gameSystems then
+        self.gameSystems:drawWorld() -- Only draw world elements (weapons, effects, etc.)
+    end
     
     -- Draw physics debug if enabled
     if DEV.DEBUG_PHYSICS and DEV.DEBUG_MASTER then
@@ -122,6 +147,11 @@ function GamePlay:draw()
     -- Camera transformation end
     if _G.camera then
         _G.camera:detach()
+    end
+    
+    -- Draw UI components from game systems (outside camera transform)
+    if self.gameSystems then
+        self.gameSystems:drawUI()
     end
     
     -- Draw debug messages (outside camera transform)
@@ -173,6 +203,11 @@ function GamePlay:keypressed(key)
         return
     end
     
+    -- Forward keypressed to game systems
+    if self.gameSystems then
+        self.gameSystems:keypressed(key)
+    end
+    
     -- Toggle master debug
     if key == Config.CONTROLS.KEYBOARD.DEBUG.TOGGLE_MASTER then
         DEV.DEBUG_MASTER = not DEV.DEBUG_MASTER
@@ -183,7 +218,12 @@ function GamePlay:keypressed(key)
     -- Forward keypresses to player when not paused
     if not self.isPaused then
         self.player:keypressed(key)
-        WeaponManager:keypressed(key)
+        
+        -- Use the new gameSystems module instead of WeaponManager
+        if self.gameSystems then
+            self.gameSystems:keypressed(key)
+        end
+        
         Projectile:keypressed(key)
     end
     
@@ -217,6 +257,10 @@ end
 
 -- Handle window resize
 function GamePlay:resize(w, h)
+    -- Pass resize event to game systems
+    if self.gameSystems then
+        self.gameSystems:resize(w, h)
+    end
     -- Update camera viewport if it exists
     if camera then
         camera.viewportWidth = w

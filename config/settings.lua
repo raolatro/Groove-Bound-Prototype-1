@@ -5,8 +5,8 @@ local PATHS = require("config.paths")
 local Config = {
     -- Game settings
     GAME = {
-        TITLE = "Groove Bound",
-        VERSION = "0.1.0",
+        TITLE = "Groove Bound (Prototype)",
+        VERSION = "0.2.0",
         WINDOW = {
             WIDTH = 1280,
             HEIGHT = 720,
@@ -51,17 +51,18 @@ local Config = {
     
     -- Development settings
     DEV = {
-        DEBUG_MASTER = true,      -- Always on during prototype phase
+        DEBUG_MASTER = false,      -- Always on during prototype phase
         DEBUG_PLAYER = true,      -- Player-specific debug toggle (Shift+F3)
         DEBUG_PHYSICS = true,     -- Physics debug toggle
         DEBUG_ASSETS = true,      -- Asset debug toggle
         DEBUG_WEAPONS = true,     -- Weapons debug toggle (F4)
         DEBUG_PROJECTILES = true, -- Projectiles debug toggle (Shift+F4)
+        DEBUG_AIM = false,        -- Aim debug toggle (shows aim vector and target)
         DEBUG_GRID = true,        -- Grid debug toggle
         DEBUG_WALLS = true,       -- Walls debug toggle
         DEBUG_CAMERA = true,      -- Camera debug (always on)
         DEBUG_COLLISION = true,   -- Collision debug (always on)
-        DEBUG_FPS = true,         -- Show FPS counter
+        DEBUG_FPS = false,         -- Show FPS counter
         INVINCIBLE = true,        -- Player invincibility for testing
         LOG_LEVEL = "info"        -- log, info, warn, error
     },

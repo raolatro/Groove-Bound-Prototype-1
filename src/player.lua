@@ -6,7 +6,6 @@ local Config = require("config.settings")
 local PATHS = require("config.paths")
 local UI = require("config.ui")
 local Controls = require("config.controls")
-local WeaponManager = require("src.weapon_manager")
 local Projectile = require("src.projectile")
 
 -- Get global Debug instance
@@ -87,8 +86,8 @@ function Player:new(x, y, world)
         }
     }
     
-    -- Initialize weapon manager
-    WeaponManager:init()
+    -- Weapons are now managed by GameSystems
+    -- No need to initialize weapons here
     
     -- Initialize physics body if world is provided
     if world then
@@ -439,8 +438,8 @@ function Player:update(dt)
         x, y = self.collider:getPosition()
     end
     
-    -- Update weapons using collider position
-    WeaponManager:updateAll(dt, x, y, self.aimX, self.aimY)
+    -- Weapons are now updated by GameSystems
+    -- No need to update weapons here
     
     -- Update projectiles
     Projectile:updateAll(dt)
@@ -448,8 +447,7 @@ end
 
 -- Draw the player
 function Player:draw()
-    -- Draw projectiles behind player
-    Projectile:drawAll()
+    -- Projectiles are now drawn by the game_play module within camera transformation
     
     -- Get position directly from collider
     if self.collider and self.spriteSheet and self.currentAnimation then
@@ -474,13 +472,8 @@ function Player:draw()
             frameHeight/2  -- center vertically
         )
     end
-    -- Draw weapons (get position directly from collider)
-    if self.collider then
-        local x, y = self.collider:getPosition()
-        WeaponManager:drawAll(x, y, self.aimX, self.aimY, self.direction)
-    else
-        WeaponManager:drawAll(self.x, self.y, self.aimX, self.aimY, self.direction)
-    end
+    -- Weapons are now drawn by GameSystems
+    -- No need to draw weapons here
     
     -- Debug visualization
     if DEBUG_PLAYER and DEV.DEBUG_MASTER then
@@ -583,16 +576,8 @@ function Player:keypressed(key)
         end
     end
     
-    -- Add test weapon when space is pressed
-    if key == "space" then
-        local testWeapon = WeaponManager:addWeapon("pistol", "pistol")
-        if testWeapon and DEBUG_PLAYER and DEV.DEBUG_MASTER then
-            print("Added test weapon: " .. testWeapon.name)
-        end
-    end
-    
-    -- Forward key presses to weapon manager and projectiles
-    WeaponManager:keypressed(key)
+    -- Weapons are now managed by GameSystems
+    -- Test weapons are now handled there
     Projectile:keypressed(key)
 end
 

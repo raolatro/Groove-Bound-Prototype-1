@@ -2,37 +2,6 @@
 
 A twin-stick survivor roguelike game built with LÖVE framework.
 
-## Project Structure
-
-```
-/
-├── assets/
-│   ├── fonts/
-│   │   └── m6x11plus.ttf
-│   └── sprites/
-│       ├── player_walk.png
-│       ├── weapons/          - Weapon sprites
-│       └── projectiles/      - Projectile sprites
-├── config/
-│   ├── paths.lua     - Centralized file path references
-│   ├── settings.lua  - Game configuration (GAME, TUNING, DEV, CONTROLS)
-│   └── weapons.lua   - Weapon definitions and properties
-├── lib/
-│   ├── anim8/        - Animation library
-│   ├── hump/         - Helper Utilities for Massive Productivity
-│   ├── windfield/    - Physics wrapper
-│   └── loader.lua    - Centralized library management
-├── src/
-│   ├── game_play.lua - Main game state
-│   ├── player.lua    - Player entity with twin-stick movement
-│   ├── projectile.lua - Projectile entity with object pooling
-│   ├── weapon_manager.lua - Manages player weapons
-│   └── weapons/
-│       └── base.lua  - Base weapon class
-├── main.lua          - Entry point, wires everything together
-└── README.md         - This file
-```
-
 ## How to Run
 
 1. Ensure you have LÖVE framework installed (https://love2d.org/)

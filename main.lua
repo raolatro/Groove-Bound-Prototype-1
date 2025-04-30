@@ -1,5 +1,11 @@
--- main.lua for Groove Bound (Prototype)
--- Twin-stick survivor roguelike
+-- Main entry point for Groove Bound
+-- Initializes game systems and sets up the main loop
+
+-- Global Debug Flags
+DEBUG_MASTER = true
+DEBUG_WEAPONS = true
+DEBUG_HITBOXES = true
+DEBUG_UI = true
 
 -- Load libraries
 local L = require("lib.loader")
