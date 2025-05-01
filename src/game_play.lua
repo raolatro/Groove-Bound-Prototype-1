@@ -23,6 +23,10 @@ local DEV = Config.DEV
 -- Create gamestate
 local GamePlay = {}
 
+-- Expose gameplay state globally for cross-system access 
+-- (needed for camera resets and other direct control)
+_G.gamePlay = GamePlay
+
 -- Local instances
 local camera = nil
 
@@ -36,6 +40,7 @@ function GamePlay:init()
     
     -- Game state
     self.isPaused = false
+    self.cameraResetNeeded = false  -- Flag to force camera reset
     
     -- Load default font
     self.font = love.graphics.newFont(GAME.DEFAULT_FONT, GAME.FONT_SIZES.MEDIUM)
@@ -88,7 +93,21 @@ function GamePlay:update(dt)
     else
         targetX, targetY = self.player.x, self.player.y
     end
-    _G.camera:update(dt, targetX, targetY)
+    
+    -- Check if camera needs to be reset (like after game restart)
+    if self.cameraResetNeeded then
+        -- Immediately snap camera to player
+        _G.camera:resetPosition(targetX, targetY)
+        self.cameraResetNeeded = false -- Reset the flag
+        
+        -- Debug output
+        if _G.DEBUG_MASTER then
+            print("Camera forcibly reset to player at: " .. targetX .. "," .. targetY)
+        end
+    else
+        -- Normal smooth camera update
+        _G.camera:update(dt, targetX, targetY)
+    end
     
     -- Update debug messages
     Debug.update(dt)
@@ -256,10 +275,8 @@ function GamePlay:mousepressed(x, y, button)
     
     -- Handle other mouse presses when not paused
     if not self.isPaused then
-        -- Handle player mouse input if needed
-        if self.player then
-            self.player:mousepressed(x, y, button)
-        end
+        -- We can add player mouse handling here in the future if needed
+        -- Player class doesn't have a mousepressed method yet
     end
 end
 

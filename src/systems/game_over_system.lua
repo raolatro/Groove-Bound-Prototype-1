@@ -5,6 +5,7 @@ local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
 local Event = require("lib.event")
+local Gamestate = L.Gamestate  -- Import Gamestate from loader
 
 -- Define events
 Event.define("GAME_RESTART", {})
@@ -233,15 +234,41 @@ function GameOverSystem:restartGame()
     
     -- Reset statistics
     self:resetStats()
+    
+    -- Signal to the game_play that camera needs to be force-reset
+    -- This ensures the camera will snap to player position on next frame
+    if _G.Gamestate and _G.Gamestate.current() then
+        local currentState = _G.Gamestate.current()
+        if currentState.cameraResetNeeded ~= nil then
+            currentState.cameraResetNeeded = true
+            
+            if _G.DEBUG_MASTER then
+                print("Camera reset flag set in GamePlay state")
+            end
+        end
+    end
 end
 
 -- Purge all entities
 function GameOverSystem:purgeEntities()
     if not self.gameSystems then return end
     
-    -- Clear enemies
+    -- Clear enemies manually
     if self.gameSystems.enemySystem then
-        self.gameSystems.enemySystem:clearAllEnemies()
+        -- Destroy colliders if they exist
+        for _, enemy in ipairs(self.gameSystems.enemySystem.enemies or {}) do
+            if enemy.collider then
+                enemy.collider:destroy()
+            end
+        end
+        
+        -- Clear the enemies table
+        self.gameSystems.enemySystem.enemies = {}
+        
+        -- Debug output
+        if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
+            print("Cleared all enemies for game restart")
+        end
     end
     
     -- Clear projectiles (both player and enemy)
@@ -272,11 +299,29 @@ function GameOverSystem:resetPlayer()
     self.player.damageFlashTimer = 0
     
     -- Reset position (if applicable)
+    local centerX = 400
+    local centerY = 300
+    
     if self.player.collider then
-        self.player.collider:setPosition(400, 300) -- Center of screen
+        self.player.collider:setPosition(centerX, centerY) -- Center of screen
     else
-        self.player.x = 400
-        self.player.y = 300
+        self.player.x = centerX
+        self.player.y = centerY
+    end
+    
+    -- Reset camera with animated transition to the player
+    if _G.camera then
+        -- Use the animated camera transition (1 second duration)
+        _G.camera:resetPosition(centerX, centerY, true, 1.0)
+        
+        -- Also set the camera reset flag for GamePlay as a fallback
+        if _G.gamePlay and _G.gamePlay.cameraResetNeeded ~= nil then
+            _G.gamePlay.cameraResetNeeded = false -- Don't reset manually since we're using animation
+        end
+        
+        if _G.DEBUG_MASTER then
+            print("Starting 1-second camera transition to player at: " .. centerX .. "," .. centerY)
+        end
     end
     
     -- Reset weapons

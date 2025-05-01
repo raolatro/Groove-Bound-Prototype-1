@@ -263,6 +263,16 @@ function EnemySystem:draw()
                 enemy.y + math.sin(enemy.rotation) * lineLength
             )
             
+            -- Draw physics debug if enabled
+            if DEV.DEBUG_PHYSICS and DEV.DEBUG_MASTER then
+                for _, enemy in ipairs(self.enemies) do
+                    if enemy.collider then
+                        love.graphics.setColor(1, 0, 0, 0.2)
+                        love.graphics.circle("fill", enemy.x, enemy.y, enemy.size or 20)
+                    end
+                end
+            end
+            
             -- Draw debug information if enabled
             if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
                 -- Draw hitbox outline

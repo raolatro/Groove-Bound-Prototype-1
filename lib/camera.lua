@@ -33,6 +33,17 @@ function Camera:new(worldWidth, worldHeight)
         
         -- Camera settings
         lag = UI.CAMERA.lag,
+        forceReset = false, -- Flag to force camera to snap to target
+        
+        -- Transition animation properties
+        isTransitioning = false,
+        transitionStartX = 0,
+        transitionStartY = 0,
+        transitionTargetX = 0,
+        transitionTargetY = 0,
+        transitionDuration = 1.0, -- 1 second transition
+        transitionTimer = 0,
+        transitionComplete = false,
         
         -- Shake properties
         shakeIntensity = 0,
@@ -44,21 +55,77 @@ function Camera:new(worldWidth, worldHeight)
     return setmetatable(instance, self)
 end
 
+-- Start a camera transition animation to a new target position
+function Camera:startTransition(targetX, targetY, duration)
+    -- Set transition properties
+    self.isTransitioning = true
+    self.transitionStartX = self.x
+    self.transitionStartY = self.y
+    
+    -- Calculate target camera position (centered on target)
+    self.transitionTargetX = targetX - self.viewportWidth / 2
+    self.transitionTargetY = targetY - self.viewportHeight / 2
+    
+    -- Set duration and reset timer
+    self.transitionDuration = duration or 1.0
+    self.transitionTimer = 0
+    self.transitionComplete = false
+    
+    -- Store final target for regular camera following after transition
+    self.targetX = targetX
+    self.targetY = targetY
+    
+    -- Debug output
+    if DEV.DEBUG_MASTER then
+        print("Starting camera transition to: " .. targetX .. "," .. targetY .. " over " .. self.transitionDuration .. " seconds")
+    end
+    
+    return self
+end
+
 -- Update camera position with smooth following
 function Camera:update(dt, targetX, targetY)
-    -- Save target position
-    self.targetX = targetX or self.targetX
-    self.targetY = targetY or self.targetY
-    
-    -- Calculate center of screen position
-    local tx = self.targetX - self.viewportWidth / 2
-    local ty = self.targetY - self.viewportHeight / 2
-    
-    -- Apply exponential lerp smoothing with lag factor
-    -- (lag 0.15 = take 15% of the way there each frame)
-    local lag = UI.CAMERA.lag
-    self.x = self.x + (tx - self.x) * lag
-    self.y = self.y + (ty - self.y) * lag
+    -- If not transitioning, handle normal camera following
+    if not self.isTransitioning then
+        -- Save target position
+        self.targetX = targetX or self.targetX
+        self.targetY = targetY or self.targetY
+        
+        -- Calculate center of screen position
+        local tx = self.targetX - self.viewportWidth / 2
+        local ty = self.targetY - self.viewportHeight / 2
+        
+        -- Apply exponential lerp smoothing with lag factor
+        local lag = UI.CAMERA.lag
+        self.x = self.x + (tx - self.x) * lag
+        self.y = self.y + (ty - self.y) * lag
+    else
+        -- Handle transition animation
+        self.transitionTimer = self.transitionTimer + dt
+        
+        if self.transitionTimer >= self.transitionDuration then
+            -- Transition complete - snap to final position
+            self.x = self.transitionTargetX
+            self.y = self.transitionTargetY
+            self.isTransitioning = false
+            self.transitionComplete = true
+            
+            -- Debug output
+            if DEV.DEBUG_MASTER then
+                print("Camera transition complete")
+            end
+        else
+            -- Calculate transition progress (0 to 1)
+            local progress = self.transitionTimer / self.transitionDuration
+            
+            -- Use a smooth ease-in-out function
+            progress = self:easeInOutCubic(progress)
+            
+            -- Interpolate between start and target positions
+            self.x = self.transitionStartX + (self.transitionTargetX - self.transitionStartX) * progress
+            self.y = self.transitionStartY + (self.transitionTargetY - self.transitionStartY) * progress
+        end
+    end
     
     -- Debug print camera target position (once per second)
     if DEV.DEBUG_CAMERA and DEV.DEBUG_MASTER then
@@ -85,6 +152,61 @@ function Camera:update(dt, targetX, targetY)
             self.shakeY = love.math.random(-self.shakeIntensity, self.shakeIntensity)
         end
     end
+end
+
+-- Cubic ease-in-out function for smooth animation
+function Camera:easeInOutCubic(x)
+    if x < 0.5 then
+        return 4 * x * x * x
+    else
+        return 1 - math.pow(-2 * x + 2, 3) / 2
+    end
+end
+
+-- Reset camera position with immediate or animated transition
+function Camera:resetPosition(targetX, targetY, animated, duration)
+    -- Save target position
+    self.targetX = targetX or self.targetX
+    self.targetY = targetY or self.targetY
+    
+    -- Clear any shaking effects
+    self.shakeX = 0
+    self.shakeY = 0
+    self.shakeIntensity = 0
+    self.shakeDuration = 0
+    
+    -- If animated transition is requested
+    if animated then
+        -- Start a smooth transition animation
+        self:startTransition(self.targetX, self.targetY, duration or 1.0)
+        
+        -- Debug output
+        if DEV.DEBUG_MASTER then
+            print("Camera starting ANIMATED transition to: " .. self.targetX .. "," .. self.targetY)
+        end
+    else
+        -- Calculate center position (where camera should be)
+        local tx = self.targetX - self.viewportWidth / 2
+        local ty = self.targetY - self.viewportHeight / 2
+        
+        -- Immediately set position (no smoothing)
+        self.x = tx
+        self.y = ty
+        
+        -- Cancel any ongoing transition
+        self.isTransitioning = false
+        
+        -- Set force reset flag for next frame's rendering
+        self.forceReset = true
+        
+        -- Debug output
+        if DEV.DEBUG_MASTER then
+            print("Camera position HARD RESET to: " .. self.targetX .. "," .. self.targetY)
+        end
+    end
+    
+    -- Make sure we're still in bounds
+    self:clampPosition()
 end
 
 -- Clamp camera position to keep world in view
@@ -129,21 +251,49 @@ function Camera:setZoom(zoom)
     self.scaleY = zoom
 end
 
--- Attach camera transformation (push)
+-- Attach camera transformation (for drawing world objects)
 function Camera:attach()
+    -- Push graphics state
     love.graphics.push()
     
-    -- Apply camera transform: translate to camera position
-    love.graphics.translate(-self.x, -self.y)
-    
-    -- Apply screen shake if active
-    if self.shakeDuration > 0 then
-        love.graphics.translate(self.shakeX, self.shakeY)
+    -- Check if we need to force a camera snap
+    if self.forceReset then
+        -- Force camera to exactly match target with no smoothing or shake
+        local tx = self.targetX - self.viewportWidth / 2
+        local ty = self.targetY - self.viewportHeight / 2
+        
+        -- Directly set camera position
+        self.x = tx
+        self.y = ty
+        
+        -- Clear any shake effects
+        self.shakeX = 0
+        self.shakeY = 0
+        self.shakeIntensity = 0
+        self.shakeDuration = 0
+        
+        -- Log the forced reset
+        if DEV.DEBUG_MASTER then
+            print("FORCED camera position: " .. self.targetX .. "," .. self.targetY)
+        end
+        
+        -- Turn off the flag
+        self.forceReset = false
     end
     
-    -- Apply additional transformations
+    -- Apply camera transformation
+    love.graphics.translate(
+        -self.x + self.shakeX, 
+        -self.y + self.shakeY
+    )
+    
+    -- Apply camera zoom
     love.graphics.scale(self.scaleX, self.scaleY)
-    love.graphics.rotate(self.rotation)
+    
+    -- Apply rotation if needed
+    if self.rotation ~= 0 then
+        love.graphics.rotate(self.rotation)
+    end
 end
 
 -- Detach camera transformation (pop)

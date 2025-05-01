@@ -269,5 +269,19 @@ function XPGem:spawnMultiple(x, y, count, valuePerGem)
     end
 end
 
+-- Clear all active gems
+function XPGem:clearAll()
+    -- Debug output
+    if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
+        print("Clearing all active XP gems: " .. #activeGems)
+    end
+    
+    -- Move all active gems back to the pool
+    while #activeGems > 0 do
+        local gem = table.remove(activeGems)
+        table.insert(gemPool, gem)
+    end
+end
+
 -- Return the module
 return XPGem

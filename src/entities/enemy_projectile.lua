@@ -211,5 +211,19 @@ function EnemyProjectile:getActiveProjectiles()
     return activeProjectiles
 end
 
+-- Clear all active projectiles
+function EnemyProjectile:clearAll()
+    -- Debug output
+    if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
+        print("Clearing all enemy projectiles: " .. #activeProjectiles)
+    end
+    
+    -- Move all active projectiles back to the pool
+    while #activeProjectiles > 0 do
+        local proj = table.remove(activeProjectiles)
+        table.insert(projectilePool, proj)
+    end
+end
+
 -- Return the module
 return EnemyProjectile

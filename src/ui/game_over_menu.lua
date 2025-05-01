@@ -21,7 +21,23 @@ local GameOverMenu = {
     
     -- UI elements
     statsPanel = nil,
-    restartButton = nil,
+    buttons = {},  -- Array of all buttons for navigation
+    selectedIndex = 1, -- Currently selected button index
+    
+    -- Selection indicator
+    selectionArrow = {
+        width = 16,
+        height = 16,
+        offset = 10,
+        pulseTimer = 0,
+        pulseSpeed = 2.5,
+        pulseAmount = 4
+    },
+    
+    -- Input state
+    lastPadInput = 0, -- Time since last gamepad input (prevents too fast navigation)
+    padRepeatDelay = 0.6, -- Initial delay before repeat
+    padRepeatRate = 0.15, -- Repeat rate after initial delay
     
     -- Stats
     stats = nil,
@@ -48,21 +64,37 @@ function GameOverMenu:init(stats)
     self.textFont = love.graphics.newFont(Config.GAME and Config.GAME.DEFAULT_FONT or nil, 18)
     self.smallFont = love.graphics.newFont(Config.GAME and Config.GAME.DEFAULT_FONT or nil, 14)
     
+    -- Create buttons array for navigation
+    self.buttons = {}
+    
     -- Set up restart button
-    self.restartButton = {
+    local restartButton = {
+        id = "restart",
         x = self.x + self.grid.cellSize,
         y = self.y + 11 * self.grid.cellSize,
         width = 14 * self.grid.cellSize,
         height = 2 * self.grid.cellSize,
         label = "RESTART",
         isHovered = false,
+        isSelected = true, -- Initially selected
         
         -- Helper function to check if point is inside button
         isInside = function(self, px, py)
             return px >= self.x and px <= self.x + self.width and
                    py >= self.y and py <= self.y + self.height
+        end,
+        
+        -- Action to perform when button is activated
+        action = function(self, menu)
+            menu:triggerRestart()
         end
     }
+    
+    -- Add button to buttons array
+    table.insert(self.buttons, restartButton)
+    
+    -- Store a reference to the restart button for compatibility
+    self.restartButton = restartButton
     
     -- Set up stats panel
     self.statsPanel = {
@@ -158,11 +190,51 @@ function GameOverMenu:update(dt)
         return
     end
     
+    -- Update selection arrow animation
+    self.selectionArrow.pulseTimer = (self.selectionArrow.pulseTimer + dt * self.selectionArrow.pulseSpeed) % (2 * math.pi)
+    
     -- Get mouse position
     local mx, my = love.mouse.getPosition()
     
-    -- Check if restart button is hovered
-    self.restartButton.isHovered = self.restartButton:isInside(mx, my)
+    -- Check if any button is hovered with mouse
+    for i, button in ipairs(self.buttons) do
+        button.isHovered = button:isInside(mx, my)
+        
+        -- Auto-select button on hover
+        if button.isHovered then
+            self:selectButton(i)
+        end
+    end
+    
+    -- Check for gamepad input
+    self.lastPadInput = self.lastPadInput + dt
+    
+    -- Check if a gamepad is connected
+    local joysticks = love.joystick.getJoysticks()
+    if #joysticks > 0 then
+        local joystick = joysticks[1] -- Use the first joystick
+        
+        -- Read vertical axis (for menu navigation)
+        local verticalAxis = joystick:getAxis(2) -- Usually axis 2 is vertical on most gamepads
+        
+        -- Navigate menu with deadzone to prevent accidental movement
+        if math.abs(verticalAxis) > 0.5 and self.lastPadInput > (self.selectedIndex == 0 and self.padRepeatDelay or self.padRepeatRate) then
+            -- Reset input timer
+            self.lastPadInput = 0
+            
+            -- Navigate up or down based on axis direction
+            if verticalAxis < -0.5 then
+                -- Navigate up
+                self:selectButton(math.max(1, self.selectedIndex - 1))
+            elseif verticalAxis > 0.5 then
+                -- Navigate down
+                self:selectButton(math.min(#self.buttons, self.selectedIndex + 1))
+            end
+        end
+        
+        -- Check for button press using axis buttons (if needed)
+        -- This would be a fallback if the gamepadpressed event doesn't work
+    end
 end
 
 -- Draw the menu
@@ -194,36 +266,64 @@ function GameOverMenu:draw()
     -- Draw stats panel
     self:drawStatsPanel()
     
-    -- Draw restart button
+    -- Draw buttons
     love.graphics.setFont(self.headingFont)
     
-    if self.restartButton.isHovered then
-        love.graphics.setColor(0.3, 0.7, 0.3, 1.0) -- Highlight on hover
-    else
-        love.graphics.setColor(0.2, 0.5, 0.2, 1.0)
+    for i, button in ipairs(self.buttons) do
+        -- Button background with hover/selection effect
+        if button.isSelected then
+            love.graphics.setColor(0.3, 0.7, 0.3, 1.0) -- Green highlight for selection
+        elseif button.isHovered then
+            love.graphics.setColor(0.3, 0.6, 0.3, 1.0) -- Lighter green for hover
+        else
+            love.graphics.setColor(0.2, 0.5, 0.2, 1.0) -- Default green
+        end
+        
+        -- Draw button background
+        love.graphics.rectangle("fill", 
+            button.x, 
+            button.y, 
+            button.width, 
+            button.height,
+            6, 6)
+        
+        -- Draw button border
+        love.graphics.setColor(0.8, 1.0, 0.8, 1.0)
+        love.graphics.rectangle("line", 
+            button.x, 
+            button.y, 
+            button.width, 
+            button.height,
+            6, 6)
+        
+        -- Button text
+        love.graphics.setColor(1, 1, 1, 1)
+        local btnTextWidth = self.headingFont:getWidth(button.label)
+        local btnTextX = button.x + (button.width - btnTextWidth) / 2
+        local btnTextY = button.y + (button.height - self.headingFont:getHeight()) / 2
+        love.graphics.print(button.label, btnTextX, btnTextY)
+        
+        -- Draw selection arrow if button is selected
+        if button.isSelected then
+            -- Calculate position for the arrow
+            local arrowX = button.x - self.selectionArrow.offset - self.selectionArrow.width
+            local arrowY = button.y + (button.height - self.selectionArrow.height) / 2
+            
+            -- Add a pulse effect to the arrow
+            local pulse = math.sin(self.selectionArrow.pulseTimer) * self.selectionArrow.pulseAmount
+            arrowX = arrowX - pulse -- Move the arrow slightly with the pulse
+            
+            -- Draw the arrow
+            love.graphics.setColor(1, 1, 0, 1) -- Yellow arrow
+            
+            -- Triangle arrow pointing right
+            love.graphics.polygon("fill", 
+                arrowX, arrowY,
+                arrowX, arrowY + self.selectionArrow.height,
+                arrowX + self.selectionArrow.width, arrowY + self.selectionArrow.height/2
+            )
+        end
     end
-    
-    love.graphics.rectangle("fill", 
-        self.restartButton.x, 
-        self.restartButton.y, 
-        self.restartButton.width, 
-        self.restartButton.height,
-        6, 6)
-    
-    love.graphics.setColor(0.8, 1.0, 0.8, 1.0)
-    love.graphics.rectangle("line", 
-        self.restartButton.x, 
-        self.restartButton.y, 
-        self.restartButton.width, 
-        self.restartButton.height,
-        6, 6)
-    
-    -- Button text
-    love.graphics.setColor(1, 1, 1, 1)
-    local btnTextWidth = self.headingFont:getWidth(self.restartButton.label)
-    local btnTextX = self.restartButton.x + (self.restartButton.width - btnTextWidth) / 2
-    local btnTextY = self.restartButton.y + (self.restartButton.height - self.headingFont:getHeight()) / 2
-    love.graphics.print(self.restartButton.label, btnTextX, btnTextY)
     
     -- Controls help text
     love.graphics.setFont(self.smallFont)
@@ -323,6 +423,23 @@ function GameOverMenu:drawStatsPanel()
     end
 end
 
+-- Select a button by index
+function GameOverMenu:selectButton(index)
+    -- Validate index bounds
+    if index < 1 or index > #self.buttons then
+        return
+    end
+    
+    -- Clear all selections
+    for i, button in ipairs(self.buttons) do
+        button.isSelected = false
+    end
+    
+    -- Select the requested button
+    self.buttons[index].isSelected = true
+    self.selectedIndex = index
+end
+
 -- Handle key press
 function GameOverMenu:keypressed(key)
     -- Skip if not visible
@@ -330,8 +447,23 @@ function GameOverMenu:keypressed(key)
         return
     end
     
-    -- Restart on Enter or R key
-    if key == "return" or key == "r" then
+    -- Navigation with arrow keys
+    if key == "up" then
+        self:selectButton(math.max(1, self.selectedIndex - 1))
+    elseif key == "down" then
+        self:selectButton(math.min(#self.buttons, self.selectedIndex + 1))
+    end
+    
+    -- Activate selected button with Enter/Return or Space
+    if key == "return" or key == "space" then
+        local selectedButton = self.buttons[self.selectedIndex]
+        if selectedButton and selectedButton.action then
+            selectedButton:action(self)
+        end
+    end
+    
+    -- Restart with R key (convenience shortcut)
+    if key == "r" then
         self:triggerRestart()
     end
 end
@@ -343,7 +475,27 @@ function GameOverMenu:gamepadpressed(joystick, button)
         return
     end
     
-    -- Restart on Start button
+    -- Debug output
+    if _G.DEBUG_MASTER and _G.DEBUG_UI then
+        print("Gamepad button pressed: " .. button)
+    end
+    
+    -- Navigation with dpad
+    if button == "dpup" then
+        self:selectButton(math.max(1, self.selectedIndex - 1))
+    elseif button == "dpdown" then
+        self:selectButton(math.min(#self.buttons, self.selectedIndex + 1))
+    end
+    
+    -- Activate with A button
+    if button == "a" then
+        local selectedButton = self.buttons[self.selectedIndex]
+        if selectedButton and selectedButton.action then
+            selectedButton:action(self)
+        end
+    end
+    
+    -- Restart on Start button (convenience shortcut)
     if button == "start" then
         self:triggerRestart()
     end
@@ -356,9 +508,23 @@ function GameOverMenu:mousepressed(x, y, button)
         return
     end
     
-    -- Check if restart button was clicked
-    if button == 1 and self.restartButton:isInside(x, y) then
-        self:triggerRestart()
+    -- Debug output
+    if _G.DEBUG_MASTER and _G.DEBUG_UI then
+        print("Mouse button pressed at: " .. x .. "," .. y)
+    end
+    
+    -- Check if any button was clicked
+    for i, menuButton in ipairs(self.buttons) do
+        if button == 1 and menuButton:isInside(x, y) then
+            -- Select the button first
+            self:selectButton(i)
+            
+            -- Activate the button
+            if menuButton.action then
+                menuButton:action(self)
+            end
+            return
+        end
     end
 end
 
