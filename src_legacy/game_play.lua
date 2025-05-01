@@ -117,31 +117,8 @@ function GamePlay:update(dt)
         targetX, targetY = self.player.x, self.player.y
     end
     
-    -- Check for different camera reset conditions in priority order
-    
-    -- 1. Check for multi-frame persistent camera reset (from GameOverSystem)
-    if self.pendingCameraReset then
-        -- Force camera position directly to the stored coordinates
-        _G.camera.x = self.pendingCameraReset.x - (_G.camera.viewportWidth / 2)
-        _G.camera.y = self.pendingCameraReset.y - (_G.camera.viewportHeight / 2)
-        
-        -- Hard reset any smoothing
-        _G.camera.lag = 1.0 -- Force instant follow
-        
-        -- Decrement frame counter
-        self.pendingCameraReset.resetFrames = self.pendingCameraReset.resetFrames - 1
-        
-        if self.pendingCameraReset.resetFrames <= 0 then
-            -- All done with multi-frame reset
-            self.pendingCameraReset = nil
-        end
-        
-        if DEV.DEBUG_MASTER then
-            Debug.log("Camera MULTI-FRAME RESET applied, frames remaining: " .. 
-                     (self.pendingCameraReset and self.pendingCameraReset.resetFrames or 0))
-        end
-    -- 2. Check for one-time camera reset
-    elseif self.cameraResetNeeded then
+    -- Check if camera needs to be reset (like after game restart)
+    if self.cameraResetNeeded then
         -- Immediately snap camera to player
         _G.camera:resetPosition(targetX, targetY)
         self.cameraResetNeeded = false -- Reset the flag
@@ -150,7 +127,6 @@ function GamePlay:update(dt)
         if DEV.DEBUG_MASTER then
             Debug.log("Camera forcibly reset to player at: " .. targetX .. "," .. targetY)
         end
-    -- 3. Normal camera update
     else
         -- Normal smooth camera update
         _G.camera:update(dt, targetX, targetY)

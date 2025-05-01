@@ -5,7 +5,7 @@ local UI = require("config.ui")
 local Config = require("config.settings")
 
 -- Get global Debug instance
-local Debug = _G.Debug
+local Debug = require("src.debug")
 
 -- Shorthand for readability
 local DEV = Config.DEV
@@ -85,6 +85,16 @@ end
 
 -- Update camera position with smooth following
 function Camera:update(dt, targetX, targetY)
+    -- First, restore saved lag value if we have one (from resetPosition)
+    if self.savedLag then
+        self.lag = self.savedLag
+        self.savedLag = nil
+        
+        if DEV.DEBUG_MASTER then
+            Debug.log("Camera: restored normal lag value: " .. self.lag)
+        end
+    end
+    
     -- If not transitioning, handle normal camera following
     if not self.isTransitioning then
         -- Save target position
@@ -96,7 +106,7 @@ function Camera:update(dt, targetX, targetY)
         local ty = self.targetY - self.viewportHeight / 2
         
         -- Apply exponential lerp smoothing with lag factor
-        local lag = UI.CAMERA.lag
+        local lag = self.lag  -- Use instance lag value instead of directly from UI
         self.x = self.x + (tx - self.x) * lag
         self.y = self.y + (ty - self.y) * lag
     else
@@ -112,7 +122,7 @@ function Camera:update(dt, targetX, targetY)
             
             -- Debug output
             if DEV.DEBUG_MASTER then
-                print("Camera transition complete")
+                Debug.log("Camera transition complete")
             end
         else
             -- Calculate transition progress (0 to 1)
@@ -165,19 +175,13 @@ end
 
 -- Reset camera position with immediate or animated transition
 function Camera:resetPosition(targetX, targetY, animated, duration)
-    -- Save target position
-    self.targetX = targetX or self.targetX
-    self.targetY = targetY or self.targetY
+    -- Store target
+    self.targetX = targetX
+    self.targetY = targetY
     
-    -- Clear any shaking effects
-    self.shakeX = 0
-    self.shakeY = 0
-    self.shakeIntensity = 0
-    self.shakeDuration = 0
-    
-    -- If animated transition is requested
+    -- Either animate or immediately set position
     if animated then
-        -- Start a smooth transition animation
+        -- Start transition animation
         self:startTransition(self.targetX, self.targetY, duration or 1.0)
         
         -- Debug output
@@ -189,19 +193,36 @@ function Camera:resetPosition(targetX, targetY, animated, duration)
         local tx = self.targetX - self.viewportWidth / 2
         local ty = self.targetY - self.viewportHeight / 2
         
-        -- Immediately set position (no smoothing)
+        -- FIXED: Absolutely ensure position is set correctly
+        -- Apply position directly to all relevant properties
         self.x = tx
         self.y = ty
         
+        -- Explicitly reset these related properties too
+        self.shakeX = 0
+        self.shakeY = 0
+        self.shakeDuration = 0
+        self.shakeIntensity = 0
+        
         -- Cancel any ongoing transition
         self.isTransitioning = false
+        self.transitionTimer = 0
+        self.transitionComplete = true
+        
+        -- Reset lag for a frame to ensure no smoothing
+        -- Will be restored to normal value on next update
+        self.savedLag = self.lag
+        self.lag = 1.0  -- 1.0 = instant follow, no smoothing
         
         -- Set force reset flag for next frame's rendering
         self.forceReset = true
         
-        -- Debug output
+        -- Debug output with more detail
         if DEV.DEBUG_MASTER then
-            print("Camera position HARD RESET to: " .. self.targetX .. "," .. self.targetY)
+            Debug.log("Camera HARD RESET with following properties:")
+            Debug.log("  position: (" .. self.x .. ", " .. self.y .. ")")
+            Debug.log("  target: (" .. targetX .. ", " .. targetY .. ")")
+            Debug.log("  lag temporarily set to 1.0 (instant) from " .. (self.savedLag or UI.CAMERA.lag))
         end
     end
     
@@ -274,7 +295,7 @@ function Camera:attach()
         
         -- Log the forced reset
         if DEV.DEBUG_MASTER then
-            print("FORCED camera position: " .. self.targetX .. "," .. self.targetY)
+            Debug.log("FORCED camera position: " .. self.targetX .. "," .. self.targetY)
         end
         
         -- Turn off the flag

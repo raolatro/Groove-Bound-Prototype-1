@@ -7,7 +7,6 @@ local PATHS = require("config.paths")
 local Event = require("lib.event")
 local Debug = require("src.debug")
 local Gamestate = L.Gamestate  -- Import Gamestate from loader
-local DEV = Config.DEV
 
 -- Define events
 Event.define("GAME_RESTART", {})
@@ -237,80 +236,15 @@ function GameOverSystem:restartGame()
     -- Reset statistics
     self:resetStats()
     
-    -- MULTIPLE APPROACH CAMERA RESET: Use several techniques to guarantee proper camera centering
-    
-    -- 1. Wait for player position to stabilize (ensure player has a valid position)
-    -- This small delay ensures the player has a chance to be fully positioned
-    love.timer.sleep(0.01) -- Wait 10ms before reading player position
-    
-    -- Get player position
-    local playerX, playerY
-    local positionSource = "unknown"
-    
-    if self.player and self.player.collider then
-        playerX, playerY = self.player.collider:getPosition()
-        positionSource = "player.collider"
-    elseif self.player then
-        playerX, playerY = self.player.x, self.player.y
-        positionSource = "player direct coords"
-    else
-        -- Fallback to screen center if player reference is invalid
-        playerX, playerY = love.graphics.getWidth()/2, love.graphics.getHeight()/2
-        positionSource = "screen center fallback"
-        Debug.log("WARNING: Camera reset without valid player position, using screen center")
-    end
-    
-    -- Always log player position details
-    Debug.log("PLAYER SPAWN POSITION: x=" .. math.floor(playerX) .. ", y=" .. math.floor(playerY) .. 
-              " (source: " .. positionSource .. ")")
-    
-    
-    -- 2. Direct camera manipulation - most aggressive approach
-    if _G.camera then
-        -- Get current camera position before reset
-        local prevCamX, prevCamY = _G.camera.x, _G.camera.y
-        Debug.log("CAMERA PRE-RESET: x=" .. math.floor(prevCamX) .. ", y=" .. math.floor(prevCamY))
-        
-        -- Completely reset all camera parameters
-        _G.camera:resetPosition(playerX, playerY) -- Uses our enhanced camera reset
-        
-        -- Direct coordinate setting as a fallback
-        _G.camera.x = playerX
-        _G.camera.y = playerY
-        
-        -- Cancel any ongoing camera behaviors
-        _G.camera.isTransitioning = false
-        _G.camera.shakeIntensity = 0
-        _G.camera.lag = 1.0 -- Force immediate snap to position
-        
-        -- Get camera position after reset
-        local newCamX, newCamY = _G.camera.x, _G.camera.y
-        Debug.log("CAMERA POST-RESET: x=" .. math.floor(newCamX) .. ", y=" .. math.floor(newCamY))
-        
-        -- Debug camera offset from player
-        local offsetX = math.floor(newCamX - playerX)
-        local offsetY = math.floor(newCamY - playerY)
-        Debug.log("CAMERA-PLAYER OFFSET: x=" .. offsetX .. ", y=" .. offsetY .. 
-                  (offsetX == 0 and offsetY == 0 and " (PERFECT)" or " (MISALIGNED)"))
-    else
-        Debug.log("ERROR: Cannot reset camera - no global camera reference")
-    end
-    
-    -- 3. GamePlay state flag - for redundancy
+    -- Signal to the game_play that camera needs to be force-reset
+    -- This ensures the camera will snap to player position on next frame
     if _G.Gamestate and _G.Gamestate.current() then
         local currentState = _G.Gamestate.current()
         if currentState.cameraResetNeeded ~= nil then
             currentState.cameraResetNeeded = true
             
-            -- Also force set camera coordinates again on the next frame
-            currentState.pendingCameraReset = {
-                x = playerX,
-                y = playerY,
-                resetFrames = 3  -- Reset for 3 consecutive frames
-            }
-            
-            if DEV.DEBUG_MASTER then
-                Debug.log("Camera reset flags set in GamePlay state with 3-frame persistence")
+            if _G.DEBUG_MASTER then
+                Debug.log("Camera reset flag set in GamePlay state")
             end
         end
     end

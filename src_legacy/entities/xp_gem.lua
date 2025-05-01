@@ -118,56 +118,12 @@ function XPGem:updateAll(dt, player)
         
         -- Movement logic
         if gem.isAttracted then
-            -- FIXED BEHAVIOR: Direct velocity assignment for smooth gem homing
-            -- Normalize direction vector
-            local dirX, dirY
-            if dist > 0 then
-                dirX, dirY = dx / dist, dy / dist
-            else
-                dirX, dirY = 0, 0
-            end
+            -- Move toward player when attracted
+            local dirX, dirY = dx / dist, dy / dist
             
-            -- Calculate improved magnetism speed with exponential easing
-            -- Starts very slow and gradually accelerates as it gets closer
-            local baseSpeed = TUNING.ATTRACT_SPEED
-            local magnetSpeed = baseSpeed
-            
-            -- Enhanced exponential easing - much stronger curve
-            if dist < TUNING.ATTRACT_RADIUS then
-                -- Calculate normalized distance (1.0 at edge of radius, 0.0 at player)
-                local normalizedDist = dist / TUNING.ATTRACT_RADIUS
-                
-                -- Exponential curve: starts very slow, ends very fast
-                -- Using a stronger exponent for more dramatic effect
-                local easeFactor = 1 - normalizedDist  -- 0 to 1, inverted distance
-                local exponent = 3  -- Higher = more dramatic curve
-                
-                -- Apply exponential ease-in
-                local speedMultiplier = math.pow(easeFactor, exponent) * 5 + 1  -- +1 to ensure we never go below base speed
-                
-                -- Apply the speed multiplier
-                magnetSpeed = baseSpeed * speedMultiplier
-                
-                -- Add a minimum speed to prevent very slow movement far away
-                if magnetSpeed < baseSpeed * 0.8 then
-                    magnetSpeed = baseSpeed * 0.8
-                end
-            end
-            
-            -- Directly set velocity based on direction and speed
-            gem.vx = dirX * magnetSpeed
-            gem.vy = dirY * magnetSpeed
-            
-            -- Debug output
-            if _G.DEBUG_MASTER and _G.DEBUG_GEMS and math.random() < 0.005 then
-                Debug.log(string.format("Gem homing: dist=%.1f, speed=%.1f, multiplier=%.2f",
-                                      dist, magnetSpeed, magnetSpeed/baseSpeed))  
-            end
-            
-            if _G.DEBUG_MASTER and _G.DEBUG_GEMS and math.random() < 0.01 then
-                Debug.log(string.format("Gem homing: dist=%.1f, speed=%.1f, v=(%.1f,%.1f)", 
-                                        dist, magnetSpeed, gem.vx, gem.vy))
-            end
+            -- Accelerate toward player
+            gem.vx = gem.vx + dirX * TUNING.ATTRACT_SPEED * dt
+            gem.vy = gem.vy + dirY * TUNING.ATTRACT_SPEED * dt
         else
             -- Initial "pop" deceleration
             gem.vx = gem.vx * 0.95
@@ -178,19 +134,9 @@ function XPGem:updateAll(dt, player)
         gem.x = gem.x + gem.vx * dt
         gem.y = gem.y + gem.vy * dt
         
-        -- IMPROVED COLLECTION: Check using player hitbox tiles (3 vertical positions)
-        -- This creates a more natural collection area matching the player's character
-        local playerHalfWidth = playerHitRadius * 0.7
-        local playerHeight = playerHitRadius * 2
-        
-        -- Check if gem is within any of the player's collision tiles
-        local inPlayerBounds = 
-            -- Check if within player's horizontal bounds
-            math.abs(gem.x - playerX) <= playerHalfWidth and
-            -- Check if within player's vertical bounds
-            math.abs(gem.y - playerY) <= playerHeight/2
-            
-        if inPlayerBounds or dist <= playerHitRadius/2 then
+        -- Check collection (simple centroid-based test as per requirements)
+        -- Uses distance to gem center rather than shape-based collision
+        if dist <= playerHitRadius then
             -- Dispatch XP gained event
             Event.dispatch("XP_GAINED", {amount = gem.value})
             

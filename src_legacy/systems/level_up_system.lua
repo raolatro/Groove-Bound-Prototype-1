@@ -222,17 +222,6 @@ function LevelUpSystem:triggerLevelUp()
     self.shop.pendingOpen = true
     self.shop.player = self.player
     
-    -- Pass system references to shop for accurate level checks
-    self.shop.weaponSystem = self.player.weaponSystem
-    self.shop.passiveSystem = self.player.passiveSystem
-    
-    -- Store the current level in the shop for display
-    self.shop.playerLevel = self.currentLevel
-    
-    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-        Debug.log("LevelUpSystem: Passed system references to shop for accurate item level verification")
-    end
-    
     if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpSystem: Shop prepared for opening with slight delay")
     end

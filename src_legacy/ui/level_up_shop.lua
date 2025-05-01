@@ -93,38 +93,17 @@ end
 -- Shop will be opened directly from LevelUpSystem:triggerLevelUp
 
 -- Open the shop with items for selection
-function LevelUpShop:open(player, weaponSystem, passiveSystem)
-    -- STRICT VALIDATION: Ensure we have ALL required references
+function LevelUpShop:open(player)
+    -- Ensure we have player reference
     if not player then
-        Debug.log("ERROR: LevelUpShop:open called without player reference")
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("ERROR: LevelUpShop:open called without player reference")
+        end
         return
     end
     
-    if not weaponSystem then
-        Debug.log("ERROR: LevelUpShop:open called without weaponSystem reference")
-        return
-    end
-    
-    if not passiveSystem then
-        Debug.log("ERROR: LevelUpShop:open called without passiveSystem reference")
-        return
-    end
-    
-    -- Store system references
+    -- Store reference to player
     self.player = player
-    self.weaponSystem = weaponSystem
-    self.passiveSystem = passiveSystem
-    
-    -- Log debug info about system references (always log this since it's critical)
-    Debug.log("LevelUpShop: Set shop references to weapon and passive systems")
-    
-    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-        -- Advanced debug info
-        local weaponCount = #weaponSystem.weapons
-        local passiveCount = #passiveSystem.passives
-        Debug.log("LevelUpShop: WeaponSystem has " .. weaponCount .. " weapons")
-        Debug.log("LevelUpShop: PassiveSystem has " .. passiveCount .. " passives")
-    end
     
     -- Reset state
     self.isOpen = true
@@ -198,73 +177,20 @@ end
 function LevelUpShop:buildCandidatePool()
     local pool = {}
     
-    -- Get player's current items and levels (with fallback logic)
-    local playerItems = {}
-    local hasWeaponSystem = (self.weaponSystem ~= nil)
-    local hasPassiveSystem = (self.passiveSystem ~= nil)
-    
-    -- Log system availability
-    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-        Debug.log("LevelUpShop: Building candidate pool with weaponSystem: " .. 
-                 (hasWeaponSystem and "available" or "MISSING") .. ", passiveSystem: " .. 
-                 (hasPassiveSystem and "available" or "MISSING"))
-    end
-    
-    -- Force fallback mode if either system is missing
-    local forceFallbackMode = (not hasWeaponSystem) or (not hasPassiveSystem)
-    
-    -- FALLBACK: If systems are missing, we'll still create cards but assume player has nothing
-    if forceFallbackMode then
-        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-            Debug.log("WARNING: Using fallback mode for shop items - some system references missing")
-        end
-        -- In fallback mode, we'll continue but assume player has no items yet
-    end
-    
     -- Get player's current items and levels
     local playerItems = {}
     
-    -- Add weapons from weaponSystem (if available)
-    if hasWeaponSystem then
-        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-            Debug.log("LevelUpShop: Using weaponSystem reference to get current weapon levels")
-        end
-        
-        -- Map all existing weapons to their levels
-        for _, weapon in ipairs(self.weaponSystem.weapons) do
-            if weapon and weapon.id then
-                playerItems[weapon.id] = weapon.level
-                
-                if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-                    Debug.log("LevelUpShop: Found weapon '" .. weapon.id .. "' at level " .. weapon.level)
-                end
-            end
-        end
-    else
-        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-            Debug.log("LevelUpShop: Cannot get weapon levels - weaponSystem is missing")
+    -- Add weapons
+    if self.player.weaponSystem then
+        for _, weapon in ipairs(self.player.weaponSystem.weapons) do
+            playerItems[weapon.id] = weapon.level
         end
     end
     
-    -- Add passives from passiveSystem (if available)
-    if hasPassiveSystem then
-        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-            Debug.log("LevelUpShop: Using passiveSystem reference to get current passive levels")
-        end
-        
-        -- Map all existing passives to their levels
-        for _, passive in ipairs(self.passiveSystem.passives) do
-            if passive and passive.id then
-                playerItems[passive.id] = passive.level
-                
-                if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-                    Debug.log("LevelUpShop: Found passive '" .. passive.id .. "' at level " .. passive.level)
-                end
-            end
-        end
-    else
-        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-            Debug.log("LevelUpShop: Cannot get passive levels - passiveSystem is missing")
+    -- Add passives
+    if self.player.passiveSystem then
+        for _, passive in ipairs(self.player.passiveSystem.passives) do
+            playerItems[passive.id] = passive.level
         end
     end
     
@@ -320,30 +246,10 @@ function LevelUpShop:buildCandidatePool()
     return pool
 end
 
--- Build card data for the given item
+-- Build a card data structure for an item
 function LevelUpShop:buildCard(item)
-    -- Get current level using the improved getLevel methods
-    local currentLevel = 0
-    
-    if item.type == "weapon" then
-        -- Use the new direct method to get exact level
-        currentLevel = self.weaponSystem:getLevel(item.id)
-        
-        Debug.log("Card: weapon '" .. item.id .. "' is at level " .. currentLevel)
-    elseif item.type == "passive" then
-        -- Use the new direct method to get exact level
-        currentLevel = self.passiveSystem:getLevel(item.id)
-        
-        Debug.log("Card: passive '" .. item.id .. "' is at level " .. currentLevel)
-    end
-    
-    -- Determine if this is a new item or an upgrade
-    local isNew = (currentLevel == 0)
-    local nextLevel = currentLevel + 1
-    
-    -- Always log card building for easier debugging
-    Debug.log("Building card for '" .. item.id .. "' - " .. 
-              (isNew and "NEW" or ("Level " .. currentLevel .. " -> " .. nextLevel)))
+    local isNew = (item.currentLevel == 0)
+    local nextLevel = item.currentLevel + 1
     
     -- Build effect summary for this level
     local summaryLine = ""
@@ -382,7 +288,7 @@ function LevelUpShop:buildCard(item)
         icon = item.icon,
         color = item.color,
         rarity = item.rarity,
-        currentLevel = currentLevel,
+        currentLevel = item.currentLevel,
         nextLevel = nextLevel,
         isNew = isNew,
         summaryLine = summaryLine
@@ -482,9 +388,8 @@ function LevelUpShop:drawTitle()
     love.graphics.setFont(font)
     love.graphics.setColor(1, 1, 1, 1)
     
-    -- Draw the level-up title using the level from the level-up system
-    -- This is more accurate as it reflects the level-up system's tracking
-    local playerLevel = self.playerLevel or (self.levelUpSystem and self.levelUpSystem.currentLevel) or 1
+    -- Draw the level-up title (with safety check for player.level)
+    local playerLevel = self.player.level or 1
     local title = "Level Up! You reached level " .. playerLevel
     local subtitle = "Choose an upgrade:"
     
@@ -591,21 +496,6 @@ function LevelUpShop:drawCard(card, x, y, isSelected)
     local tagWidth = self.grid:getWidthInPixels(2)
     local tagHeight = self.grid:getHeightInPixels(0.6)
     local tagX = x + (self.cardWidth - tagWidth) / 2
-    
-    -- Debug verified level indicator
-    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP and isSelected then
-        local debugX = x + self.cardWidth + 10
-        local debugY = y + 10
-        love.graphics.setColor(1, 1, 1, 0.8)
-        love.graphics.setFont(love.graphics.newFont(10))
-        love.graphics.print(
-            "ID: " .. card.id .. "\n" ..
-            "Type: " .. card.type .. "\n" ..
-            "Level: " .. card.currentLevel .. " -> " .. card.nextLevel .. "\n" ..
-            "isNew: " .. tostring(card.isNew),
-            debugX, debugY
-        )
-    end
     
     if card.isNew then
         -- Draw NEW tag with green background
@@ -718,33 +608,10 @@ function LevelUpShop:update(dt)
         -- When delay is over, open the shop
         if self.delayTimer >= (self.openDelay or 0) then
             self.pendingOpen = false
+            self:open(self.player)
             
-            -- CRITICAL: Ensure we have system references before opening
-            if not self.player then
-                Debug.log("ERROR: Cannot open shop - missing player reference")
-                return
-            end
-            
-            -- Get/verify system references directly from player if needed
-            if not self.weaponSystem and self.player.weaponSystem then
-                self.weaponSystem = self.player.weaponSystem
-                Debug.log("LevelUpShop: Retrieved weaponSystem directly from player")
-            end
-            
-            if not self.passiveSystem and self.player.passiveSystem then
-                self.passiveSystem = self.player.passiveSystem
-                Debug.log("LevelUpShop: Retrieved passiveSystem directly from player")
-            end
-            
-            -- Pass all required system references to open
-            self:open(self.player, self.weaponSystem, self.passiveSystem)
-            
-            -- Log system state after open
             if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
-                Debug.log("LevelUpShop:update - Shop state after opening:")
-                Debug.log("  isOpen: " .. tostring(self.isOpen))
-                Debug.log("  Selected index: " .. tostring(self.selectedIndex)) 
-                Debug.log("  Card count: " .. #self.cards)
+                Debug.log("LevelUpShop:update - Opening shop after pause delay")
             end
         end
     end
@@ -784,32 +651,16 @@ end
 function LevelUpShop:gamepadpressed(gamepad, button)
     if not self.isOpen then return false end
     
-    -- Navigation controls
     if button == "dpleft" or button == "leftshoulder" then
         self:selectPrevious()
         return true
     elseif button == "dpright" or button == "rightshoulder" then
         self:selectNext()
         return true
-    elseif button == "dpup" then
-        -- If on buttons row, move to cards
-        if self.selectedIndex > #self.cards then
-            self.selectedIndex = 1
-        end
-        return true
-    elseif button == "dpdown" then
-        -- If on cards, move to buttons
-        if self.selectedIndex <= #self.cards then
-            self.selectedIndex = #self.cards + 1 -- Select reroll button
-        end
-        return true
-    -- Action buttons
-    elseif button == "a" or button == "y" or button == "triangle" then
-        -- Use A (Xbox) / X (PS) or Y (Xbox) / Triangle (PS) for confirmation
+    elseif button == "a" or button == "dpdown" then
         self:selectCurrent()
         return true
     elseif button == "b" then
-        -- Use B (Xbox) / Circle (PS) to skip/cancel
         self:skip()
         return true
     end
@@ -914,7 +765,9 @@ end
 function LevelUpShop:selectCard(index)
     -- Validate card selection
     if not self.cards or not self.cards[index] then 
-        Debug.log("ERROR: LevelUpShop:selectCard - Invalid card or index: " .. tostring(index))
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("ERROR: LevelUpShop:selectCard - Invalid card or index: " .. tostring(index))
+        end
         return 
     end
     
@@ -922,65 +775,50 @@ function LevelUpShop:selectCard(index)
     local itemId = card.id
     local itemType = card.type
     
-    -- Always log selection for debugging
-    Debug.log("PLAYER SELECTED: " .. itemType .. " '" .. itemId .. "' (" .. 
-              (card.isNew and "NEW" or ("Level " .. (card.nextLevel-1) .. " -> " .. card.nextLevel)) .. ")")
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpShop: Selected " .. itemType .. " " .. itemId .. " (Level " .. card.nextLevel .. ")")
+    end
     
-    -- Apply the selection with the new addOrUpgrade methods
+    -- Apply the selection - store the selection result to verify it worked
+    local selectionSuccessful = false
+    
     if itemType == "weapon" then
-        -- Use the new unified method for weapons
-        if self.weaponSystem then
-            -- Get the slot index for the weapon (new or existing)
-            local slotIndex = self.weaponSystem:addOrUpgrade(itemId)
-            
-            -- Activate all weapons to start firing immediately
-            self.weaponSystem:activateAll()
-            
-            Debug.log("Weapon '" .. itemId .. "' added/upgraded in slot " .. (slotIndex or "?") .. 
-                      " and activated for immediate firing")
-            
-            -- Find and refresh the inventory UI if present
-            if self.player and self.player.inventoryUI then
-                self.player.inventoryUI:refresh()
-                Debug.log("Refreshed inventory UI after weapon change")
-            end
-            
-            -- Dispatch appropriate event
-            if card.isNew then
-                Event.dispatch("PLAYER_ITEM_GAINED", {id = itemId, type = "weapon", level = 1})
-            else
-                Event.dispatch("PLAYER_ITEM_LEVELED", {id = itemId, type = "weapon", level = card.nextLevel})
-            end
+        -- Add or upgrade weapon
+        if not self.weaponSystem then
+            Debug.log("ERROR: Cannot select weapon card - no weapon system reference")
+            return
+        end
+        
+        if card.isNew then
+            -- Add new weapon
+            selectionSuccessful = self.weaponSystem:addWeapon(itemId)
+            Event.dispatch("PLAYER_ITEM_GAINED", {id = itemId, type = "weapon", level = 1})
         else
-            Debug.log("ERROR: Cannot add/upgrade weapon - missing weaponSystem reference")
+            -- Upgrade existing weapon
+            selectionSuccessful = self.weaponSystem:upgradeWeapon(itemId)
+            Event.dispatch("PLAYER_ITEM_LEVELED", {id = itemId, type = "weapon", level = card.nextLevel})
         end
     elseif itemType == "passive" then
-        -- Use the new unified method for passives
-        if self.passiveSystem then
-            -- Add or upgrade the passive
-            self.passiveSystem:addOrUpgrade(itemId)
-            
-            Debug.log("Passive '" .. itemId .. "' added/upgraded successfully")
-            
-            -- Find and refresh the buffs UI if present
-            if self.player and self.player.buffsUI then
-                self.player.buffsUI:refresh()
-                Debug.log("Refreshed buffs UI after passive change")
-            end
-            
-            -- Dispatch appropriate event
-            if card.isNew then
-                Event.dispatch("PLAYER_ITEM_GAINED", {id = itemId, type = "passive", level = 1})
-            else
-                Event.dispatch("PLAYER_ITEM_LEVELED", {id = itemId, type = "passive", level = card.nextLevel})
-            end
+        -- Add or upgrade passive
+        if not self.passiveSystem then
+            Debug.log("ERROR: Cannot select passive card - no passive system reference")
+            return
+        end
+        
+        if card.isNew then
+            -- Add new passive
+            selectionSuccessful = self.passiveSystem:addPassive(itemId)
+            Event.dispatch("PLAYER_ITEM_GAINED", {id = itemId, type = "passive", level = 1})
         else
-            Debug.log("ERROR: Cannot add/upgrade passive - missing passiveSystem reference")
+            -- Upgrade existing passive
+            selectionSuccessful = self.passiveSystem:upgradePassive(itemId)
+            Event.dispatch("PLAYER_ITEM_LEVELED", {id = itemId, type = "passive", level = card.nextLevel})
         end
     end
     
-    -- Broadcast a general item change event for any listeners
-    Event.dispatch("PLAYER_ITEMS_CHANGED", {})
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpShop: Selection applied successfully: " .. tostring(selectionSuccessful))
+    end
     
     -- Close shop and resume gameplay
     self:close()
@@ -997,8 +835,8 @@ function LevelUpShop:reroll()
             Debug.log("LevelUpShop: Rerolling (Cost: " .. TUNING.SHOP.REROLL_COST .. " coins)")
         end
         
-        -- Reopen shop with new items - important to pass all system references
-        self:open(self.player, self.weaponSystem, self.passiveSystem)
+        -- Reopen shop with new items
+        self:open(self.player)
     else
         -- Not enough coins
         if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then

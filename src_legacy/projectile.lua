@@ -154,7 +154,7 @@ function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, spr
     end
     
     -- Debug output for projectile spawning
-    if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
+    if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
         local weaponName = "Unknown"
         local level = 1
         if weaponInfo then
@@ -196,7 +196,7 @@ function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, spr
         proj.sourceWeapon = weaponInfo.id or "unknown"
         
         -- Debug output for weapon properties
-        if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
+        if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
             Debug.log(string.format("Projectile properties: piercing=%d, critChance=%.1f%%, sourceWeapon=%s", 
                 proj.piercing or 0, (proj.critChance or 0) * 100, proj.sourceWeapon or "none"))
         end
@@ -217,7 +217,7 @@ function Projectile:updateAll(dt)
         proj.y = proj.y + proj.vy * dt
         
         -- Debug position update
-        if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
+        if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
             if math.random() < 0.01 then  -- Log only occasionally to avoid spam
                 Debug.log(string.format("PROJECTILE MOVE: ID=%d, Pos=(%d,%d), Vel=(%d,%d), dt=%.3f, Travel=%.1f", 
                     i, math.floor(proj.x), math.floor(proj.y), math.floor(proj.vx), math.floor(proj.vy), dt, proj.distance or 0))
@@ -298,7 +298,7 @@ function Projectile:updateAll(dt)
             proj.y > screenHeight + margin
             
         -- Debug out of bounds
-        if outOfBounds and DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
+        if outOfBounds and DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
             Debug.log(string.format("PROJECTILE OUT OF BOUNDS: ID=%d, Pos=(%d,%d), Screen=(%d,%d), Margin=%d",
                 i, math.floor(proj.x), math.floor(proj.y), screenWidth, screenHeight, margin))
         end
@@ -367,7 +367,7 @@ function Projectile:deactivate(index, reason)
     proj.isActive = false
     
     -- Debug deactivation with detailed info
-    if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
+    if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
         reason = reason or "unknown"
         Debug.log(string.format("PROJECTILE DEACTIVATED: ID=%d, Reason=%s, Pos=(%d,%d), Lifetime=%.2fs, Distance=%.1f", 
             index, reason, math.floor(proj.x), math.floor(proj.y), proj.lifetime, proj.distance or 0))
@@ -380,7 +380,7 @@ end
 -- Draw all active projectiles
 function Projectile:drawAll()
     -- Debug header
-    if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
+    if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
         if math.random() < 0.01 then  -- Log occasionally
             Debug.log(string.format("PROJECTILE DRAW: Active Count=%d", #activeProjectiles))
         end
@@ -420,7 +420,7 @@ function Projectile:drawAll()
                 love.graphics.circle("fill", proj.x, proj.y, radius)
                 
                 -- Add a trail in debug mode
-                if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
+                if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
                     -- Draw a trailing line showing direction
                     local trailLength = 20
                     local backX = proj.x - (proj.vx / (proj.vx*proj.vx + proj.vy*proj.vy)^0.5) * trailLength

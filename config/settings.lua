@@ -56,9 +56,9 @@ local Config = {
             INVINCIBLE_TIME = 0.1        -- Seconds of invincibility after being hit
         },
         GEMS = {
-            BASE_XP = 50,                -- XP per gem before multiplier
-            ATTRACT_RADIUS = 350,        -- px; dashed circle debug
-            ATTRACT_SPEED = 600          -- px/s toward player
+            BASE_XP = 20,                -- XP per gem before multiplier
+            ATTRACT_RADIUS = 150,        -- px; dashed circle debug
+            ATTRACT_SPEED = 300          -- px/s toward player
         },
         
         -- Luck and rarity settings
@@ -79,11 +79,11 @@ local Config = {
     
     -- Development settings
     DEV = {
-        DEBUG_MASTER = false,      -- Always on during prototype phase
+        DEBUG_MASTER = true,      -- Always on during prototype phase
         DEBUG_PLAYER = false,      -- Player-specific debug toggle (Shift+F3)
         DEBUG_PHYSICS = false,     -- Physics debug toggle
         DEBUG_ASSETS = false,      -- Asset debug toggle
-        DEBUG_WEAPONS = false,     -- Weapons debug toggle (F4)
+        DEBUG_WEAPONS = true,     -- Weapons debug toggle (F4)
         DEBUG_PROJECTILES = false, -- Projectiles debug toggle (Shift+F4)
         DEBUG_AIM = true,        -- Aim debug toggle (shows aim vector and target)
         DEBUG_UI = true,         -- UI debug toggle (shows cooldown times, names, etc.)
@@ -95,7 +95,7 @@ local Config = {
         DEBUG_CAMERA = false,      -- Camera debug (always on)
         DEBUG_COLLISION = false,   -- Collision debug (always on)
         DEBUG_FPS = false,         -- Show FPS counter
-        DEBUG_LEVEL_UP = false,    -- Level-up debug toggle
+        DEBUG_LEVEL_UP = true,    -- Level-up debug toggle
 
         RANDOMIZE_ENEMIES = true, -- Randomize enemy size and color within range
         INVINCIBLE = false,        -- Player invincibility for testing
