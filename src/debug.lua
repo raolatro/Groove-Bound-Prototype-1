@@ -10,8 +10,8 @@ local DEV = Config.DEV
 -- Debug module
 local Debug = {
     messages = {},         -- Queue of debug messages
-    maxMessages = 20,      -- Maximum number of messages to display
-    displayTime = 10,      -- Time each message stays on screen (seconds)
+    maxMessages = 50,      -- Maximum number of messages to display
+    displayTime = 30,      -- Time each message stays on screen (seconds)
     font = nil             -- Debug font
 }
 

@@ -4,12 +4,10 @@
 local L = require("lib.loader")
 local PATHS = require("config.paths")
 local Debug = require("src.debug")
+local Config = require("config.settings")
 
 -- Get reference to global Debug flags
--- These are defined in main.lua as globals
-local DEBUG_MASTER = _G.DEBUG_MASTER or false
-local DEBUG_WEAPONS = _G.DEBUG_WEAPONS or false
-local DEBUG_UI = _G.DEBUG_UI or false
+local DEV = Config.DEV
 
 -- Import all systems
 local WeaponSystem = require("src.systems.weapon_system")
@@ -66,7 +64,7 @@ local GameSystems = {
 -- Initialize all game systems
 function GameSystems:init(player)
     -- Check for debug flag
-    local debugEnabled = DEBUG_MASTER and DEBUG_WEAPONS
+    local debugEnabled = DEV.DEBUG_MASTER and DEV.DEBUG_WEAPONS
     
     -- Store player reference
     self.player = player
@@ -151,7 +149,7 @@ function GameSystems:update(dt)
     local function safeCall(obj, method, ...)
         if obj and type(obj[method]) == "function" then
             local success, result = pcall(obj[method], obj, ...)
-            if not success and _G.DEBUG_MASTER then
+            if not success and DEV.DEBUG_MASTER then
                 Debug.log("Error calling " .. method .. ": " .. tostring(result))
             end
             return success, result
@@ -165,8 +163,7 @@ function GameSystems:update(dt)
     end
     
     -- Check if level-up shop is active (safely)
-    local isLevelUpActive = self.levelUpSystem and 
-                          (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive)
+    local isLevelUpActive = self.levelUpSystem and self.levelUpSystem.shopOpen
     
     -- Don't update gameplay systems if in level-up shop or game over
     local pauseGameplay = isLevelUpActive or 
@@ -237,15 +234,15 @@ function GameSystems:update(dt)
         local invincible = Config and Config.DEV and Config.DEV.INVINCIBLE
         if not invincible then
             local success, damage = safeCall(self.enemyProjectileSystem, "checkPlayerCollision", self.player)
-            if success and damage and damage > 0 and _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
+            if success and damage and damage > 0 and DEV.DEBUG_MASTER and DEV.DEBUG_ENEMIES then
                 Debug.log("Player took " .. damage .. " damage from enemy projectile!")
             end
         end
     end
     
     -- Debug XP addition
-    if self.levelUpSystem and self.debugStats and _G.DEBUG_MASTER and 
-       _G.DEBUG_WEAPONS and love.keyboard.isDown("k") then
+    if self.levelUpSystem and self.debugStats and DEV.DEBUG_MASTER and 
+       DEV.DEBUG_WEAPONS and love.keyboard.isDown("k") then
         safeCall(self.levelUpSystem, "addXP", self.debugStats.xpToAdd or 10)
     end
     
@@ -305,7 +302,7 @@ function GameSystems:drawUI()
     end
     
     -- Draw inventory grid (if not game over or in level-up)
-    local isInShop = self.levelUpSystem and (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive)
+    local isInShop = self.levelUpSystem and self.levelUpSystem.shopOpen
     if self.inventoryGrid and not (self.gameOverSystem and self.gameOverSystem.isGameOver) and not isInShop then
         self.inventoryGrid:draw()
     end
@@ -347,7 +344,7 @@ function GameSystems:keypressed(key)
     end
     
     -- Handle level-up shop input
-    if self.levelUpSystem and (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive) then
+    if self.levelUpSystem and self.levelUpSystem.shopOpen then
         -- Forward key presses to level-up shop
         if self.levelUpSystem:keypressed(key) then
             return -- Input was handled by level-up shop
@@ -355,7 +352,7 @@ function GameSystems:keypressed(key)
     end
     
     -- Debug keys for weapon testing
-    if _G.DEBUG_MASTER and _G.DEBUG_WEAPONS then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_WEAPONS then
         -- Add weapon with 1-4 keys
         if key == "1" then
             self.weaponSystem:addWeapon("pistol")
@@ -439,7 +436,7 @@ function GameSystems:gamepadpressed(joystick, button)
     end
     
     -- Handle level-up shop input
-    if self.levelUpSystem and (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive) then
+    if self.levelUpSystem and self.levelUpSystem.shopOpen then
         -- Forward gamepad presses to level-up shop
         if self.levelUpSystem:gamepadpressed(joystick, button) then
             return -- Input was handled by level-up shop

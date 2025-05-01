@@ -35,12 +35,7 @@ local LevelUpShop = {
     cardWidth = 0,            -- Width of each card
     cardHeight = 0,           -- Height of each card
     
-    -- Animation state
-    flash = {
-        active = false,
-        timer = 0,
-        duration = 0
-    }
+    -- No flash animation state anymore (removed)
 }
 
 -- Initialize the level-up shop
@@ -54,7 +49,7 @@ function LevelUpShop:init(player, levelUpSystem)
         self.weaponSystem = levelUpSystem.weaponSystem
         self.passiveSystem = levelUpSystem.passiveSystem
         
-        if DEV.DEBUG_MASTER then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
             if self.weaponSystem then
                 Debug.log("LevelUpShop: Received weapon system reference")
             else
@@ -87,39 +82,26 @@ function LevelUpShop:init(player, levelUpSystem)
     -- This simplifies implementation and avoids potential compatibility issues
     self.useSimpleBackground = true
     
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpShop: Initialized with simple background rendering")
     end
     
     return self
 end
 
--- Start a white flash effect when leveling up
-function LevelUpShop:startFlash(duration)
-    self.flash.active = true
-    self.flash.timer = 0
-    self.flash.duration = duration or TUNING.SHOP.FLASH_TIME
-    
-    if DEV.DEBUG_MASTER then
-        Debug.log("LevelUpShop: Starting flash effect for " .. self.flash.duration .. " seconds")
-    end
-end
-
--- Update flash animation
-function LevelUpShop:updateFlash(dt)
-    if not self.flash.active then return end
-    
-    self.flash.timer = self.flash.timer + dt
-    
-    if self.flash.timer >= self.flash.duration then
-        self.flash.active = false
-        -- Open shop after flash completes
-        self:open(self.player)
-    end
-end
+-- These functions have been removed as we no longer need the flash effect
+-- Shop will be opened directly from LevelUpSystem:triggerLevelUp
 
 -- Open the shop with items for selection
 function LevelUpShop:open(player)
+    -- Ensure we have player reference
+    if not player then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("ERROR: LevelUpShop:open called without player reference")
+        end
+        return
+    end
+    
     -- Store reference to player
     self.player = player
     
@@ -127,7 +109,11 @@ function LevelUpShop:open(player)
     self.isOpen = true
     self.selectedIndex = 1
     self.cards = {}
-    self.transitionAlpha = 0
+    self.transitionAlpha = 1.0 -- Start fully visible, no transition
+    
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpShop:open - Opening shop with isOpen set to: " .. tostring(self.isOpen))
+    end
     
     -- Build candidate pool of items
     local candidatePool = self:buildCandidatePool()
@@ -177,7 +163,7 @@ function LevelUpShop:open(player)
     end
     
     -- Debug output
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpShop: Opened shop with " .. #self.cards .. " cards")
     end
     
@@ -250,7 +236,7 @@ function LevelUpShop:buildCandidatePool()
         end
     end
     
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpShop: Built candidate pool with " .. #pool .. " items")
         for i, item in ipairs(pool) do
             Debug.log(string.format("%d. %s (%s, level %d/%d)", i, item.displayName, item.rarity, item.currentLevel, item.maxLevel))
@@ -323,26 +309,44 @@ end
 function LevelUpShop:captureBackground()
     -- With the simplified approach, we don't need to capture anything
     -- This method is kept for API compatibility
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpShop: Using simplified background approach")
     end
 end
 
 -- Draw the shop UI
 function LevelUpShop:draw()
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        -- Debug.log("LevelUpShop:draw - isOpen: " .. tostring(self.isOpen))
+    end
+    
+    -- If the shop isn't explicitly open, exit early
     if not self.isOpen then
-        -- Draw flash effect if active
-        if self.flash.active then
-            local alpha = 1.0 - (self.flash.timer / self.flash.duration)
-            love.graphics.setColor(1, 1, 1, alpha)
-            love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
-            love.graphics.setColor(1, 1, 1, 1)
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("LevelUpShop:draw - Skipping draw, shop not open")
         end
         return
     end
     
-    -- Draw blurred background
-    self:drawBackground()
+    -- Safety check for player reference
+    if not self.player then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("ERROR: LevelUpShop:draw - Missing player reference")
+        end
+        
+        -- Try to continue anyway to maintain flow
+        self:drawBackground()
+        return
+    end
+    
+    -- Draw darkened background to ensure shop stands out against game
+    -- Use a more opaque background (0.95 opacity)
+    love.graphics.setColor(0, 0, 0, 0.95)
+    love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+    love.graphics.setColor(1, 1, 1, 1)
+    
+    -- Draw shop title
+    self:drawTitle()
     
     -- Draw cards
     self:drawCards()
@@ -351,23 +355,65 @@ function LevelUpShop:draw()
     self:drawButtons()
     
     -- Debug info
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.print("Level-Up Shop (Selected: " .. self.selectedIndex .. ")", 10, 10)
-        love.graphics.print("Player Luck: " .. self.player.luck, 10, 30)
-        love.graphics.print("Player Coins: " .. self.player.coins, 10, 50)
+        
+        -- Add safety checks for player properties
+        local playerLuck = self.player.luck or 0
+        local playerCoins = self.player.coins or 0
+        
+        love.graphics.print("Player Luck: " .. playerLuck, 10, 30)
+        love.graphics.print("Player Coins: " .. playerCoins, 10, 50)
     end
+end
+
+-- Draw the shop title
+function LevelUpShop:drawTitle()
+    -- Safety check - make sure we have player reference
+    if not self.player then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("ERROR: LevelUpShop:drawTitle - No player reference")
+        end
+        return
+    end
+    
+    local screenWidth = love.graphics.getWidth()
+    local font = love.graphics.newFont(32)
+    
+    -- Save current font
+    local currentFont = love.graphics.getFont()
+    
+    -- Set title font and color
+    love.graphics.setFont(font)
+    love.graphics.setColor(1, 1, 1, 1)
+    
+    -- Draw the level-up title (with safety check for player.level)
+    local playerLevel = self.player.level or 1
+    local title = "Level Up! You reached level " .. playerLevel
+    local subtitle = "Choose an upgrade:"
+    
+    -- Draw title and subtitle
+    love.graphics.printf(title, 0, love.graphics.getHeight() * 0.15, screenWidth, "center")
+    love.graphics.printf(subtitle, 0, love.graphics.getHeight() * 0.2, screenWidth, "center")
+    
+    -- Restore original font
+    love.graphics.setFont(currentFont)
 end
 
 -- Draw the background (simplified approach)
 function LevelUpShop:drawBackground()
-    -- Just draw a semi-transparent black overlay
-    -- This creates a dimmed effect that helps the cards stand out
-    love.graphics.setColor(0, 0, 0, 0.8)
+    -- Draw a fully opaque black overlay with a slight transparency
+    -- This ensures the shop is clearly visible against the game background
+    love.graphics.setColor(0, 0, 0, 0.9)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
     
     -- Reset color
     love.graphics.setColor(1, 1, 1, 1)
+    
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpShop:drawBackground - Drawing overlay")
+    end
 end
 
 -- Draw the item cards
@@ -555,13 +601,27 @@ end
 
 -- Update the shop UI and handle input
 function LevelUpShop:update(dt)
-    -- Update flash animation
-    self:updateFlash(dt)
+    -- Handle delayed opening if set
+    if self.pendingOpen then
+        self.delayTimer = (self.delayTimer or 0) + dt
+        
+        -- When delay is over, open the shop
+        if self.delayTimer >= (self.openDelay or 0) then
+            self.pendingOpen = false
+            self:open(self.player)
+            
+            if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+                Debug.log("LevelUpShop:update - Opening shop after pause delay")
+            end
+        end
+    end
     
+    -- Do nothing more if not fully open
     if not self.isOpen then
         return
     end
-    
+
+    -- Used for animations or other continuous updates while shop is open
     -- Update transition alpha
     self.transitionAlpha = math.min(1, self.transitionAlpha + dt * 3)
 end
@@ -610,7 +670,16 @@ end
 
 -- Handle mouse click
 function LevelUpShop:mousepressed(x, y, button)
+    -- Only process clicks when the shop is open and fully initialized
     if not self.isOpen or button ~= 1 then return false end
+    
+    -- Additional safety check - ensure we have cards to show 
+    if not self.cards or #self.cards == 0 then 
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("LevelUpShop:mousepressed - No cards available, ignoring click")
+        end
+        return false 
+    end
     
     -- Check if a card was clicked
     local screenWidth = love.graphics.getWidth()
@@ -694,17 +763,25 @@ end
 
 -- Handle card selection
 function LevelUpShop:selectCard(index)
-    if not self.cards[index] then return end
+    -- Validate card selection
+    if not self.cards or not self.cards[index] then 
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("ERROR: LevelUpShop:selectCard - Invalid card or index: " .. tostring(index))
+        end
+        return 
+    end
     
     local card = self.cards[index]
     local itemId = card.id
     local itemType = card.type
     
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpShop: Selected " .. itemType .. " " .. itemId .. " (Level " .. card.nextLevel .. ")")
     end
     
-    -- Apply the selection
+    -- Apply the selection - store the selection result to verify it worked
+    local selectionSuccessful = false
+    
     if itemType == "weapon" then
         -- Add or upgrade weapon
         if not self.weaponSystem then
@@ -714,11 +791,11 @@ function LevelUpShop:selectCard(index)
         
         if card.isNew then
             -- Add new weapon
-            self.weaponSystem:addWeapon(itemId)
+            selectionSuccessful = self.weaponSystem:addWeapon(itemId)
             Event.dispatch("PLAYER_ITEM_GAINED", {id = itemId, type = "weapon", level = 1})
         else
             -- Upgrade existing weapon
-            self.weaponSystem:upgradeWeapon(itemId)
+            selectionSuccessful = self.weaponSystem:upgradeWeapon(itemId)
             Event.dispatch("PLAYER_ITEM_LEVELED", {id = itemId, type = "weapon", level = card.nextLevel})
         end
     elseif itemType == "passive" then
@@ -730,13 +807,17 @@ function LevelUpShop:selectCard(index)
         
         if card.isNew then
             -- Add new passive
-            self.passiveSystem:addPassive(itemId)
+            selectionSuccessful = self.passiveSystem:addPassive(itemId)
             Event.dispatch("PLAYER_ITEM_GAINED", {id = itemId, type = "passive", level = 1})
         else
             -- Upgrade existing passive
-            self.passiveSystem:upgradePassive(itemId)
+            selectionSuccessful = self.passiveSystem:upgradePassive(itemId)
             Event.dispatch("PLAYER_ITEM_LEVELED", {id = itemId, type = "passive", level = card.nextLevel})
         end
+    end
+    
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpShop: Selection applied successfully: " .. tostring(selectionSuccessful))
     end
     
     -- Close shop and resume gameplay
@@ -750,7 +831,7 @@ function LevelUpShop:reroll()
         -- Deduct coins
         self.player.coins = self.player.coins - TUNING.SHOP.REROLL_COST
         
-        if DEV.DEBUG_MASTER then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
             Debug.log("LevelUpShop: Rerolling (Cost: " .. TUNING.SHOP.REROLL_COST .. " coins)")
         end
         
@@ -758,7 +839,7 @@ function LevelUpShop:reroll()
         self:open(self.player)
     else
         -- Not enough coins
-        if DEV.DEBUG_MASTER then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
             Debug.log("LevelUpShop: Not enough coins to reroll. Need " .. TUNING.SHOP.REROLL_COST .. ", have " .. self.player.coins)
         end
     end
@@ -766,7 +847,7 @@ end
 
 -- Handle skip
 function LevelUpShop:skip()
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpShop: Skipped selection")
     end
     
@@ -776,13 +857,18 @@ end
 
 -- Close the shop
 function LevelUpShop:close()
+    -- Set shop state to closed
     self.isOpen = false
     
-    -- Resume gameplay
+    -- Clear card data to prevent memory issues
+    self.cards = {}
+    
+    -- Resume gameplay by dispatching the close event
+    -- This will trigger the game to unpause
     Event.dispatch("LEVEL_UP_SHOP_CLOSED", {})
     
-    if DEV.DEBUG_MASTER then
-        Debug.log("LevelUpShop: Closed")
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpShop: Closed and dispatched LEVEL_UP_SHOP_CLOSED event")
     end
 end
 

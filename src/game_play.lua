@@ -41,6 +41,7 @@ function GamePlay:init()
     
     -- Game state
     self.isPaused = false
+    self.pauseReason = nil  -- Can be "manual", "levelup", "gameover", etc.
     self.cameraResetNeeded = false  -- Flag to force camera reset
     
     -- Load default font
@@ -71,7 +72,7 @@ function GamePlay:enter()
     self.gameSystems = GameSystems:init(self.player)
     
     -- Print debug message about initialization
-    if DEBUG_MASTER and DEBUG_WEAPONS then
+    if DEV.DEBUG_MASTER then
         Debug.log("Gameplay initialized - Projectile system and weapon systems ready")
     end
     
@@ -79,8 +80,9 @@ function GamePlay:enter()
     Event.subscribe("LEVEL_UP_STARTED", function(data)
         -- Pause the game when level-up shop starts
         self.isPaused = true
+        self.pauseReason = "levelup" -- Set reason for pause
         
-        if DEBUG_MASTER then
+        if DEV.DEBUG_MASTER then
             Debug.log("GamePlay: Game paused due to level-up shop")
         end
     end)
@@ -88,8 +90,9 @@ function GamePlay:enter()
     Event.subscribe("LEVEL_UP_SHOP_CLOSED", function(data)
         -- Unpause the game when level-up shop closes
         self.isPaused = false
+        self.pauseReason = nil -- Clear pause reason
         
-        if DEBUG_MASTER then
+        if DEV.DEBUG_MASTER then
             Debug.log("GamePlay: Game unpaused - level-up shop closed")
         end
     end)
@@ -121,7 +124,7 @@ function GamePlay:update(dt)
         self.cameraResetNeeded = false -- Reset the flag
         
         -- Debug output
-        if _G.DEBUG_MASTER then
+        if DEV.DEBUG_MASTER then
             Debug.log("Camera forcibly reset to player at: " .. targetX .. "," .. targetY)
         end
     else
@@ -132,8 +135,21 @@ function GamePlay:update(dt)
     -- Update debug messages
     Debug.update(dt)
     
-    -- Skip update if paused
-    if self.isPaused then return end
+    -- If the game is paused
+    if self.isPaused then
+        -- Still update the level-up shop if it's open
+        if self.pauseReason == "levelup" and self.gameSystems and self.gameSystems.levelUpSystem then
+            -- Only update the level-up system when paused for level-up
+            self.gameSystems.levelUpSystem:update(dt)
+            
+            if DEV.DEBUG_MASTER then
+                -- Debug.log("GamePlay:update - Updating level-up system while paused")
+            end
+        end
+        
+        -- Skip all other updates
+        return
+    end
     
     -- Update physics world
     self.world:update(dt)
@@ -154,6 +170,12 @@ end
 
 -- Draw the game
 function GamePlay:draw()
+    -- Determine if we're in a level-up shop state
+    local isLevelUpShopOpen = self.isPaused and self.pauseReason == "levelup" and 
+                            self.gameSystems and 
+                            self.gameSystems.levelUpSystem and 
+                            self.gameSystems.levelUpSystem.shopOpen
+    
     -- Clear screen
     love.graphics.clear(0.05, 0.05, 0.1)
     
@@ -190,15 +212,47 @@ function GamePlay:draw()
     
     -- Draw UI components from game systems (outside camera transform)
     if self.gameSystems then
-        self.gameSystems:drawUI()
+        -- Normal UI drawing when not paused
+        if not self.isPaused then
+            self.gameSystems:drawUI()
+        -- Special case: when paused for level-up, we still need to draw the shop
+        elseif self.pauseReason == "levelup" then
+            -- Only draw the level-up shop when paused for level-up
+            if self.gameSystems.levelUpSystem then
+                self.gameSystems.levelUpSystem:draw()
+            end
+            
+            if DEV.DEBUG_MASTER then
+                -- Debug.log("GamePlay:draw - Drawing level-up shop while paused")
+            end
+        end
     end
     
-    -- Draw debug messages (outside camera transform)
-    Debug.draw()
-    
-    -- Draw pause overlay
+    -- Handle pause conditions
     if self.isPaused then
-        self:drawPauseOverlay()
+        -- If paused for level-up, draw the shop UI
+        if self.pauseReason == "levelup" and self.gameSystems and self.gameSystems.levelUpSystem then
+            -- First draw a full-screen dark overlay
+            love.graphics.setColor(0, 0, 0, 0.9)
+            love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+            love.graphics.setColor(1, 1, 1, 1)
+            
+            -- Force the level-up shop to draw
+            if self.gameSystems.levelUpSystem.shop then
+                -- Force shop to be open
+                self.gameSystems.levelUpSystem.shop.isOpen = true
+                
+                -- Draw the shop UI
+                self.gameSystems.levelUpSystem.shop:draw()
+                
+                if DEV.DEBUG_MASTER then
+                    -- Debug.log("GamePlay:draw - Directly drawing level-up shop during pause")
+                end
+            end
+        else
+            -- For other pause types, draw the standard pause overlay
+            self:drawPauseOverlay()
+        end
     end
     
     -- Draw FPS counter
@@ -214,10 +268,20 @@ function GamePlay:draw()
         love.graphics.setFont(self.font)
         love.graphics.print("DEBUG MODE", 10, love.graphics.getHeight() - 30)
     end
+    
+    -- Draw debug messages last to ensure they appear on top of everything
+    -- This includes level-up shop and all other UI elements
+    Debug.draw()
 end
 
 -- Draw pause overlay
 function GamePlay:drawPauseOverlay()
+    -- Only draw the pause overlay if this is a manual pause
+    -- Don't draw if paused due to level up shop or other special screens
+    if self.pauseReason and self.pauseReason ~= "manual" then
+        return -- Skip drawing overlay for special pause types
+    end
+    
     -- Dim the background
     love.graphics.setColor(0, 0, 0, 0.7)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
@@ -236,9 +300,30 @@ end
 
 -- Handle keypresses
 function GamePlay:keypressed(key)
-    -- Toggle pause on escape
+    -- Toggle pause on escape, but only if we're not in a special pause state
     if key == Config.CONTROLS.KEYBOARD.PAUSE then
-        self.isPaused = not self.isPaused
+        if self.pauseReason and self.pauseReason ~= "manual" then
+            -- Don't allow manual pause toggle during level-up or other special states
+            if DEV.DEBUG_MASTER then
+                Debug.log("GamePlay: Cannot toggle pause during " .. self.pauseReason)
+            end
+        else
+            -- Toggle pause state
+            self.isPaused = not self.isPaused
+            
+            -- Set or clear the pause reason
+            if self.isPaused then
+                self.pauseReason = "manual"
+                if DEV.DEBUG_MASTER then
+                    Debug.log("GamePlay: Game manually paused")
+                end
+            else
+                self.pauseReason = nil
+                if DEV.DEBUG_MASTER then
+                    Debug.log("GamePlay: Game manually unpaused")
+                end
+            end
+        end
         return
     end
     

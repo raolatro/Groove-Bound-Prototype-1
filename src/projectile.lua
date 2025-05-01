@@ -60,8 +60,8 @@ function Projectile:initPool()
         projectilePool[i] = proj
     end
     
-    if DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
-        Debug.log("Projectile pool initialized with " .. poolSize .. " projectiles")
+    if DEV.DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
+        -- Debug.log("Projectile pool initialized with " .. poolSize .. " projectiles")
     end
 end
 
@@ -98,7 +98,7 @@ function Projectile:get(x, y, vx, vy, damage, radius, sprite)
         proj = activeProjectiles[oldestIdx]
         table.remove(activeProjectiles, oldestIdx)
         
-        if DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
+        if DEV.DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
             Debug.log("Recycling oldest projectile (lifetime: " .. oldestLifetime .. ")")
         end
     end
@@ -138,7 +138,7 @@ function Projectile:get(x, y, vx, vy, damage, radius, sprite)
     -- Add to active projectiles list
     table.insert(activeProjectiles, proj)
     
-    if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
         Debug.log("Projectile activated at " .. x .. ", " .. y)
     end
     
@@ -154,7 +154,7 @@ function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, spr
     end
     
     -- Debug output for projectile spawning
-    if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+    if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
         local weaponName = "Unknown"
         local level = 1
         if weaponInfo then
@@ -196,7 +196,7 @@ function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, spr
         proj.sourceWeapon = weaponInfo.id or "unknown"
         
         -- Debug output for weapon properties
-        if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+        if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
             Debug.log(string.format("Projectile properties: piercing=%d, critChance=%.1f%%, sourceWeapon=%s", 
                 proj.piercing or 0, (proj.critChance or 0) * 100, proj.sourceWeapon or "none"))
         end
@@ -217,7 +217,7 @@ function Projectile:updateAll(dt)
         proj.y = proj.y + proj.vy * dt
         
         -- Debug position update
-        if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+        if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
             if math.random() < 0.01 then  -- Log only occasionally to avoid spam
                 Debug.log(string.format("PROJECTILE MOVE: ID=%d, Pos=(%d,%d), Vel=(%d,%d), dt=%.3f, Travel=%.1f", 
                     i, math.floor(proj.x), math.floor(proj.y), math.floor(proj.vx), math.floor(proj.vy), dt, proj.distance or 0))
@@ -265,7 +265,7 @@ function Projectile:updateAll(dt)
                             proj.piercing = proj.piercing - 1
                             
                             -- Debug output
-                            if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
+                            if DEV.DEBUG_MASTER and DEV.DEBUG_PROJECTILES then
                                 Debug.log(string.format("Projectile pierced through enemy! Remaining pierces: %d", proj.piercing))
                             end
                         else
@@ -298,7 +298,7 @@ function Projectile:updateAll(dt)
             proj.y > screenHeight + margin
             
         -- Debug out of bounds
-        if outOfBounds and _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+        if outOfBounds and DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
             Debug.log(string.format("PROJECTILE OUT OF BOUNDS: ID=%d, Pos=(%d,%d), Screen=(%d,%d), Margin=%d",
                 i, math.floor(proj.x), math.floor(proj.y), screenWidth, screenHeight, margin))
         end
@@ -367,7 +367,7 @@ function Projectile:deactivate(index, reason)
     proj.isActive = false
     
     -- Debug deactivation with detailed info
-    if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+    if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
         reason = reason or "unknown"
         Debug.log(string.format("PROJECTILE DEACTIVATED: ID=%d, Reason=%s, Pos=(%d,%d), Lifetime=%.2fs, Distance=%.1f", 
             index, reason, math.floor(proj.x), math.floor(proj.y), proj.lifetime, proj.distance or 0))
@@ -380,7 +380,7 @@ end
 -- Draw all active projectiles
 function Projectile:drawAll()
     -- Debug header
-    if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+    if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
         if math.random() < 0.01 then  -- Log occasionally
             Debug.log(string.format("PROJECTILE DRAW: Active Count=%d", #activeProjectiles))
         end
@@ -420,7 +420,7 @@ function Projectile:drawAll()
                 love.graphics.circle("fill", proj.x, proj.y, radius)
                 
                 -- Add a trail in debug mode
-                if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
+                if DEV.DEBUG_MASTER and (DEV.DEBUG_PROJECTILES or DEV.DEBUG_WEAPONS) then
                     -- Draw a trailing line showing direction
                     local trailLength = 20
                     local backX = proj.x - (proj.vx / (proj.vx*proj.vx + proj.vy*proj.vy)^0.5) * trailLength
@@ -436,7 +436,7 @@ end
 
 -- Draw debug visualization for all active projectiles
 function Projectile:drawDebug()
-    if not (DEBUG_PROJECTILES and DEV.DEBUG_MASTER) then return end
+    if not (DEV.DEBUG_PROJECTILES and DEV.DEBUG_MASTER) then return end
     
     for _, proj in ipairs(activeProjectiles) do
         if proj.isActive then
@@ -476,9 +476,9 @@ end
 function Projectile:keypressed(key)
     -- Toggle projectiles debug (requires master debug to be on)
     if key == Config.CONTROLS.KEYBOARD.DEBUG.TOGGLE_PROJECTILES and love.keyboard.isDown("lshift", "rshift") then
-        DEBUG_PROJECTILES = not DEBUG_PROJECTILES
+        DEV.DEBUG_PROJECTILES = not DEV.DEBUG_PROJECTILES
         if DEV.DEBUG_MASTER then
-            Debug.log("Projectiles debug: " .. (DEBUG_PROJECTILES and "ON" or "OFF"))
+            Debug.log("Projectiles debug: " .. (DEV.DEBUG_PROJECTILES and "ON" or "OFF"))
         end
     end
 end

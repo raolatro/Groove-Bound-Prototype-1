@@ -33,11 +33,6 @@ local LevelUpSystem = {
     shop = nil,
     shopOpen = false,
     
-    -- Flash effect
-    flashActive = false,
-    flashTimer = 0,
-    flashDuration = TUNING.SHOP.FLASH_TIME,
-    
     -- Callbacks
     onLevelUp = nil,
     onChoiceSelected = nil,
@@ -63,8 +58,22 @@ function LevelUpSystem:init(weaponSystem, passiveSystem, player)
     self.flashActive = false
     self.flashTimer = 0
     
-    -- Initialize level-up shop
+    -- Initialize level-up shop with correct references
     self.shop = LevelUpShop:init(player, self)
+    
+    -- Make sure weapon and passive system references are set
+    if self.weaponSystem and self.passiveSystem then
+        self.shop.weaponSystem = self.weaponSystem
+        self.shop.passiveSystem = self.passiveSystem
+        
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("LevelUpSystem: Set shop references to weapon and passive systems")
+        end
+    else
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("LevelUpSystem: WARNING - Missing weapon or passive system references")
+        end
+    end
     
     -- Register for shop closure event
     local Event = require("lib.event")
@@ -76,7 +85,7 @@ function LevelUpSystem:init(weaponSystem, passiveSystem, player)
     -- Mark as initialized
     self.initialized = true
     
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpSystem initialized with shop")
     end
     
@@ -91,7 +100,7 @@ function LevelUpSystem:calculateXPForLevel(level)
     local xpPerLevel = 25
     local xpNeeded = baseXP + (xpPerLevel * (level - 1))
     
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log(string.format("LevelUpSystem: XP needed for level %d = %d", level, xpNeeded))
     end
     
@@ -108,7 +117,7 @@ function LevelUpSystem:addXP(amount)
     
     -- Skip if level-up shop is open or flash is active
     if self.shopOpen or self.flashActive or self.isLevelingUp then
-        if DEV.DEBUG_MASTER then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
             Debug.log("LevelUpSystem: Skipping XP add - level up in progress")
         end
         return false, "Level-up in progress"
@@ -123,7 +132,7 @@ function LevelUpSystem:addXP(amount)
     local oldXP = self.currentXP
     self.currentXP = self.currentXP + amount
     
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log(string.format("⭐ LevelUpSystem: Added %d XP. Now %d/%d XP (Level %d)", 
                            amount, self.currentXP, self.xpToNextLevel, self.currentLevel))
     end
@@ -140,8 +149,8 @@ function LevelUpSystem:addXP(amount)
         self.currentXP = surplus
         self.xpToNextLevel = self:calculateXPForLevel(self.currentLevel + 1)
         
-        if DEV.DEBUG_MASTER then
-            Debug.log(string.format("🔥 LevelUpSystem: LEVEL UP! Now level %d with %d surplus XP. Next level at %d XP", 
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log(string.format("LevelUpSystem: LEVEL UP! Now level %d with %d surplus XP. Next level at %d XP", 
                                 self.currentLevel, surplus, self.xpToNextLevel))
         end
         
@@ -175,32 +184,50 @@ end
 
 -- Trigger the level-up sequence
 function LevelUpSystem:triggerLevelUp()
-    -- Skip if already leveling up
-    if self.isLevelingUp or self.shopOpen or self.flashActive then
-        if DEV.DEBUG_MASTER then
-            Debug.log("LevelUpSystem: Skipping trigger - already in level-up process")
+    -- Ensure we have necessary systems
+    if not self.shop then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("LevelUpSystem: Cannot trigger level up - shop not created")
         end
         return
     end
     
-    -- Set leveling up state
-    self.isLevelingUp = true
-    
-    -- Start the flash effect
-    self.flashActive = true
-    self.flashTimer = 0
-    self.flashDuration = TUNING.SHOP.FLASH_TIME
-    
-    -- Trigger shop flash effect
-    if self.shop then
-        self.shop:startFlash(self.flashDuration)
+    -- Check if shop is already open (avoid double trigger)
+    if self.shopOpen or self.isLevelingUp then
+        if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+            Debug.log("LevelUpSystem: Shop already open, ignoring duplicate trigger")
+        end
+        return
     end
     
-    -- Dispatch event to pause gameplay
+    -- CRITICAL SEQUENCE: First pause the game, then open shop
+    
+    -- 1. Set leveling up state BEFORE dispatching events
+    self.isLevelingUp = true
+    self.shopOpen = true
+    
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpSystem: Pausing game for level-up shop")
+    end
+    
+    -- 2. First dispatch event to pause gameplay
+    -- This ensures the game is paused BEFORE the shop opens
     Event.dispatch("LEVEL_UP_STARTED", {})
     
-    if DEV.DEBUG_MASTER then
-        Debug.log("LevelUpSystem: Level up triggered, starting flash effect")
+    -- 3. Give a tiny delay to ensure pause is processed
+    -- Delay is handled through the engine's timing system
+    local pauseDelay = 0.05 -- 50ms delay for pause to take effect
+    self.shop.openDelay = pauseDelay
+    self.shop.delayTimer = 0
+    self.shop.pendingOpen = true
+    self.shop.player = self.player
+    
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpSystem: Shop prepared for opening with slight delay")
+    end
+    
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+        Debug.log("LevelUpSystem: Level up triggered, shop opened")
     end
     
     -- Call the level up callback if provided (legacy support)
@@ -234,15 +261,13 @@ function LevelUpSystem:reset()
     -- Reset state flags
     self.isLevelingUp = false
     self.shopOpen = false
-    self.flashActive = false
-    self.flashTimer = 0
     
     -- Also reset the shop if it exists
     if self.shop then
         self.shop.isOpen = false
     end
     
-    if DEV.DEBUG_MASTER then
+    if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
         Debug.log("LevelUpSystem: Reset to Level 1 (0/" .. self.xpToNextLevel .. " XP)")
     end
     
@@ -256,22 +281,9 @@ function LevelUpSystem:update(dt)
         return
     end
     
-    -- Handle flash effect
-    if self.flashActive then
-        self.flashTimer = self.flashTimer + dt
-        
-        -- When flash completes, open the shop
-        if self.flashTimer >= self.flashDuration then
-            self.flashActive = false
-            if self.shop and not self.shopOpen then
-                self.shopOpen = true
-                self.shop:open(self.player)
-            end
-        end
-    end
-    
-    -- Update shop if open
-    if self.shop and (self.shopOpen or self.flashActive) then
+    -- Update shop - simple update as the flash effect has been removed
+    if self.shop then
+        -- Update the shop UI
         self.shop:update(dt)
     end
 end
@@ -283,9 +295,27 @@ function LevelUpSystem:draw()
         return
     end
     
-    -- Draw shop if open or flashing
-    if self.shop and (self.shopOpen or self.flashActive) then
+    -- Draw shop if open - double-check both the system flag and the shop state
+    if self.shop and (self.shopOpen or self.shop.isOpen) then
+        -- Ensure shopOpen state is consistent between system and shop
+        if self.shopOpen ~= self.shop.isOpen then
+            self.shopOpen = self.shop.isOpen -- Sync the states
+            if DEV.DEBUG_MASTER and DEV.DEBUG_LEVEL_UP then
+                Debug.log("LevelUpSystem:draw - Syncing shop state: " .. tostring(self.shopOpen))
+            end
+        end
+        
+        if DEV.DEBUG_MASTER and self.shopOpen then
+            Debug.log("LevelUpSystem:draw - Drawing shop")
+        end
+        
+        -- Call shop's draw method to render UI
         self.shop:draw()
+    else
+        -- Only log if debug is enabled and with lower frequency to avoid spam
+        if DEV.DEBUG_MASTER and love.timer.getTime() % 1 < 0.1 then
+            Debug.log("LevelUpSystem:draw - Shop not open or not initialized")
+        end
     end
 end
 

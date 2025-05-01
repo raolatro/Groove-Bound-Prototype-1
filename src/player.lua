@@ -15,7 +15,7 @@ local DEV = Config.DEV
 local BG = UI.GRID
 
 -- Local debug flags, ANDed with master debug
-local DEBUG_PLAYER = false
+local DEBUG_PLAYER = true
 
 -- Vector normalization helper function
 local function VecNormalize(x, y)
@@ -93,9 +93,6 @@ function Player:new(x, y, world)
             h = BG.base
         }
     }
-    
-    -- Weapons are now managed by GameSystems
-    -- No need to initialize weapons here
     
     -- Initialize physics body if world is provided
     if world then
