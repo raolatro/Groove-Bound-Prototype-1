@@ -2,19 +2,20 @@
 -- Handles the main gameplay screen
 
 local L = require("lib.loader")
-local Config = require("config.settings")
 local PATHS = require("config.paths")
-local UI = require("config.ui")
-local Controls = require("config.controls")
+local Config = require("config.settings")
 local Player = require("src.player")
-local Projectile = require("src.projectile")
-local Camera = require("lib.camera")
 local Arena = require("src.arena")
 local WallManager = require("src.wall_manager")
+local Projectile = require("src.projectile")
 local GameSystems = require("src.systems.game_systems")
+local Debug = require("src.debug")
+local Camera = require("lib.camera")
+local UI = require("config.ui")
+local Controls = require("config.controls")
+local Event = require("lib.event")
 
--- Get global Debug instance
-local Debug = _G.Debug
+-- Use the imported Debug module
 
 -- Shorthand for readability
 local GAME = Config.GAME
@@ -71,8 +72,27 @@ function GamePlay:enter()
     
     -- Print debug message about initialization
     if DEBUG_MASTER and DEBUG_WEAPONS then
-        print("Gameplay initialized - Projectile system and weapon systems ready")
+        Debug.log("Gameplay initialized - Projectile system and weapon systems ready")
     end
+    
+    -- Set up event listeners for level-up shop
+    Event.subscribe("LEVEL_UP_STARTED", function(data)
+        -- Pause the game when level-up shop starts
+        self.isPaused = true
+        
+        if DEBUG_MASTER then
+            Debug.log("GamePlay: Game paused due to level-up shop")
+        end
+    end)
+    
+    Event.subscribe("LEVEL_UP_SHOP_CLOSED", function(data)
+        -- Unpause the game when level-up shop closes
+        self.isPaused = false
+        
+        if DEBUG_MASTER then
+            Debug.log("GamePlay: Game unpaused - level-up shop closed")
+        end
+    end)
     
     -- TODO: Initialize enemies, pickups, etc.
 end
@@ -102,7 +122,7 @@ function GamePlay:update(dt)
         
         -- Debug output
         if _G.DEBUG_MASTER then
-            print("Camera forcibly reset to player at: " .. targetX .. "," .. targetY)
+            Debug.log("Camera forcibly reset to player at: " .. targetX .. "," .. targetY)
         end
     else
         -- Normal smooth camera update
@@ -230,7 +250,7 @@ function GamePlay:keypressed(key)
     -- Toggle master debug
     if key == Config.CONTROLS.KEYBOARD.DEBUG.TOGGLE_MASTER then
         DEV.DEBUG_MASTER = not DEV.DEBUG_MASTER
-        print("Master debug: " .. (DEV.DEBUG_MASTER and "ON" or "OFF"))
+        Debug.log("Master debug: " .. (DEV.DEBUG_MASTER and "ON" or "OFF"))
         return
     end
     

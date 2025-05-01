@@ -7,9 +7,7 @@ local PATHS = require("config.paths")
 local UI = require("config.ui")
 local Controls = require("config.controls")
 local Projectile = require("src.projectile")
-
--- Get global Debug instance
-local Debug = _G.Debug
+local Debug = require("src.debug")
 
 -- Shorthand for readability
 local TUNING = Config.TUNING.PLAYER
@@ -79,6 +77,10 @@ function Player:new(x, y, world)
         stickY = 0,
         -- Health-related fields
         currentHP = Config.TUNING.PLAYER.MAX_HP or 200,
+        
+        -- Level-up shop related fields
+        luck = 0,     -- Affects item rarity weights
+        coins = 0,    -- Currency for shop rerolls and other features
         maxHP = Config.TUNING.PLAYER.MAX_HP or 200,
         invincibleTimer = 0,
         invincibleTime = Config.TUNING.PLAYER.INVINCIBLE_TIME or 1.0,
@@ -142,8 +144,8 @@ function Player:new(x, y, world)
     )
     
     if DEBUG_PLAYER and DEV.DEBUG_MASTER then
-        print(string.format("Sprite sheet dimensions: %dx%d", sheetWidth, sheetHeight))
-        print(string.format("Frame dimensions: %dx%d", frameWidth, frameHeight))
+        Debug.log(string.format("Sprite sheet dimensions: %dx%d", sheetWidth, sheetHeight))
+        Debug.log(string.format("Frame dimensions: %dx%d", frameWidth, frameHeight))
     end
     
     instance.animations = {
@@ -162,7 +164,7 @@ function Player:checkGamepad()
     self.gamepad = joysticks[1] -- Use first gamepad if available
     
     if self.gamepad and DEBUG_PLAYER and DEV.DEBUG_MASTER then
-        print("Gamepad connected: " .. self.gamepad:getName())
+        Debug.log("Gamepad connected: " .. self.gamepad:getName())
     end
 end
 
@@ -378,7 +380,7 @@ end
 -- Fire weapon (placeholder)
 function Player:fire()
     if DEBUG_PLAYER and DEV.DEBUG_MASTER then
-        print("Player fired in direction: " .. self.aimX .. ", " .. self.aimY)
+        Debug.log("Player fired in direction: " .. self.aimX .. ", " .. self.aimY)
     end
     
     -- Firing is now handled by the WeaponManager
@@ -497,7 +499,7 @@ function Player:takeDamage(amount, source)
     -- Skip if invincible
     if self.invincibleTimer > 0 or Config.DEV.INVINCIBLE then
         if _G.DEBUG_MASTER and _G.DEBUG_HP then
-            print("Player is invincible, damage ignored")
+            Debug.log("Player is invincible, damage ignored")
         end
         return false
     end
@@ -529,8 +531,8 @@ function Player:takeDamage(amount, source)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_HP then
-        print(string.format("Player -%d HP from %s (%d/%d)", 
-            amount, source or "unknown", self.currentHP, self.maxHP))
+        Debug.log(string.format("Player -%d HP from %s (%d/%d)", 
+            amount, source, self.currentHP, self.maxHP))
     end
     
     -- Fire event with source information
@@ -553,7 +555,7 @@ end
 function Player:die()
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_HP then
-        print("PLAYER DIED")
+        Debug.log("PLAYER DIED")
     end
     
     -- Fire event
@@ -768,7 +770,7 @@ function Player:keypressed(key)
     if key == "f3" and love.keyboard.isDown("lshift", "rshift") then
         DEBUG_PLAYER = not DEBUG_PLAYER
         if DEV.DEBUG_MASTER then
-            print("Player debug: " .. (DEBUG_PLAYER and "ON" or "OFF"))
+            Debug.log("Player debug: " .. (DEBUG_PLAYER and "ON" or "OFF"))
         end
     end
     

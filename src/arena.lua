@@ -6,6 +6,7 @@ local Config = require("config.settings")
 local UI = require("config.ui")
 local PATHS = require("config.paths")
 local BlockGrid = require("src.ui.block_grid")
+local Debug = require("src.debug")
 
 -- Shorthand for readability
 local DEV = Config.DEV
@@ -60,8 +61,8 @@ function Arena:init(world)
     
     -- Debug output
     if DEBUG_WALLS and DEV.DEBUG_MASTER then
-        print("Arena initialized: " .. ARENA.w .. "x" .. ARENA.h)
-        print("Walls created: " .. #self.walls)
+        Debug.log("Arena initialized: " .. ARENA.w .. "x" .. ARENA.h)
+        Debug.log("Walls created: " .. #self.walls)
     end
 end
 
@@ -139,7 +140,7 @@ function Arena:keypressed(key)
         DEBUG_WALLS = not DEBUG_WALLS
         DEV.DEBUG_WALLS = DEBUG_WALLS
         if DEV.DEBUG_MASTER then
-            print("Walls debug: " .. (DEBUG_WALLS and "ON" or "OFF"))
+            Debug.log("Walls debug: " .. (DEBUG_WALLS and "ON" or "OFF"))
         end
     end
 end

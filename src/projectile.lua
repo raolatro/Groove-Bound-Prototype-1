@@ -4,6 +4,7 @@
 local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
+local Debug = require("src.debug")
 
 -- Shorthand for readability
 local DEV = Config.DEV
@@ -60,7 +61,7 @@ function Projectile:initPool()
     end
     
     if DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
-        print("Projectile pool initialized with " .. poolSize .. " projectiles")
+        Debug.log("Projectile pool initialized with " .. poolSize .. " projectiles")
     end
 end
 
@@ -98,7 +99,7 @@ function Projectile:get(x, y, vx, vy, damage, radius, sprite)
         table.remove(activeProjectiles, oldestIdx)
         
         if DEBUG_PROJECTILES and DEV.DEBUG_MASTER then
-            print("Recycling oldest projectile (lifetime: " .. oldestLifetime .. ")")
+            Debug.log("Recycling oldest projectile (lifetime: " .. oldestLifetime .. ")")
         end
     end
     
@@ -138,7 +139,7 @@ function Projectile:get(x, y, vx, vy, damage, radius, sprite)
     table.insert(activeProjectiles, proj)
     
     if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
-        print("Projectile activated at " .. x .. ", " .. y)
+        Debug.log("Projectile activated at " .. x .. ", " .. y)
     end
     
     return proj
@@ -148,21 +149,21 @@ end
 function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, sprite, weaponInfo)
     -- Parameter validation
     if not (x and y and vx and vy) then
-        print("ERROR: Projectile spawn missing position or velocity parameters")
+        Debug.log("ERROR: Projectile spawn missing position or velocity parameters")
         return nil
     end
     
     -- Debug output for projectile spawning
     if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
         local weaponName = "Unknown"
-        local weaponLevel = 1
+        local level = 1
         if weaponInfo then
             weaponName = weaponInfo.name or "Unknown"
-            weaponLevel = weaponInfo.level or 1
+            level = weaponInfo.level or 1
         end
         
-        print(string.format("PROJECTILE SPAWN: Weapon=%s, Level=%d, Pos=(%d,%d), Vel=(%d,%d), Damage=%d, Lifetime=%d", 
-            weaponName, weaponLevel, math.floor(x), math.floor(y), math.floor(vx), math.floor(vy), damage, maxLifetime))
+        Debug.log(string.format("PROJECTILE SPAWN: Weapon=%s, Level=%d, Pos=(%d,%d), Vel=(%d,%d), Damage=%d, Lifetime=%d", 
+            weaponName or "unknown", level or 0, math.floor(x), math.floor(y), math.floor(vx), math.floor(vy), damage, maxLifetime))
     end
     
     -- Initialize defaults
@@ -196,8 +197,8 @@ function Projectile:spawn(x, y, vx, vy, damage, maxLifetime, colour, radius, spr
         
         -- Debug output for weapon properties
         if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
-            print(string.format("Projectile properties: piercing=%d, critChance=%.1f%%, sourceWeapon=%s", 
-                proj.piercing, proj.critChance * 100, proj.sourceWeapon))
+            Debug.log(string.format("Projectile properties: piercing=%d, critChance=%.1f%%, sourceWeapon=%s", 
+                proj.piercing or 0, (proj.critChance or 0) * 100, proj.sourceWeapon or "none"))
         end
     end
     
@@ -218,10 +219,8 @@ function Projectile:updateAll(dt)
         -- Debug position update
         if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
             if math.random() < 0.01 then  -- Log only occasionally to avoid spam
-                print(string.format("PROJECTILE MOVE: ID=%d, Pos=(%d,%d), Vel=(%d,%d), dt=%.3f, Travel=%.1f", 
-                    i, math.floor(proj.x), math.floor(proj.y), 
-                    math.floor(proj.vx), math.floor(proj.vy), 
-                    dt, proj.distance or 0))
+                Debug.log(string.format("PROJECTILE MOVE: ID=%d, Pos=(%d,%d), Vel=(%d,%d), dt=%.3f, Travel=%.1f", 
+                    i, math.floor(proj.x), math.floor(proj.y), math.floor(proj.vx), math.floor(proj.vy), dt, proj.distance or 0))
             end
         end
         
@@ -267,7 +266,7 @@ function Projectile:updateAll(dt)
                             
                             -- Debug output
                             if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
-                                print(string.format("Projectile pierced through enemy! Remaining pierces: %d", proj.piercing))
+                                Debug.log(string.format("Projectile pierced through enemy! Remaining pierces: %d", proj.piercing))
                             end
                         else
                             -- Deactivate projectile without piercing
@@ -300,9 +299,8 @@ function Projectile:updateAll(dt)
             
         -- Debug out of bounds
         if outOfBounds and _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
-            print(string.format("PROJECTILE OUT OF BOUNDS: ID=%d, Pos=(%d,%d), Screen=(%d,%d), Margin=%d",
-                i, math.floor(proj.x), math.floor(proj.y),
-                screenWidth, screenHeight, margin))
+            Debug.log(string.format("PROJECTILE OUT OF BOUNDS: ID=%d, Pos=(%d,%d), Screen=(%d,%d), Margin=%d",
+                i, math.floor(proj.x), math.floor(proj.y), screenWidth, screenHeight, margin))
         end
             
         if outOfBounds then
@@ -371,10 +369,8 @@ function Projectile:deactivate(index, reason)
     -- Debug deactivation with detailed info
     if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
         reason = reason or "unknown"
-        print(string.format("PROJECTILE DEACTIVATED: ID=%d, Reason=%s, Pos=(%d,%d), Lifetime=%.2fs, Distance=%.1f", 
-            index, reason, 
-            math.floor(proj.x or 0), math.floor(proj.y or 0),
-            proj.lifetime or 0, proj.distance or 0))
+        Debug.log(string.format("PROJECTILE DEACTIVATED: ID=%d, Reason=%s, Pos=(%d,%d), Lifetime=%.2fs, Distance=%.1f", 
+            index, reason, math.floor(proj.x), math.floor(proj.y), proj.lifetime, proj.distance or 0))
     end
     
     -- Remove from active list
@@ -386,7 +382,7 @@ function Projectile:drawAll()
     -- Debug header
     if _G.DEBUG_MASTER and (_G.DEBUG_PROJECTILES or _G.DEBUG_WEAPONS) then
         if math.random() < 0.01 then  -- Log occasionally
-            print(string.format("PROJECTILE DRAW: Active Count=%d", #activeProjectiles))
+            Debug.log(string.format("PROJECTILE DRAW: Active Count=%d", #activeProjectiles))
         end
     end
     
@@ -482,7 +478,7 @@ function Projectile:keypressed(key)
     if key == Config.CONTROLS.KEYBOARD.DEBUG.TOGGLE_PROJECTILES and love.keyboard.isDown("lshift", "rshift") then
         DEBUG_PROJECTILES = not DEBUG_PROJECTILES
         if DEV.DEBUG_MASTER then
-            print("Projectiles debug: " .. (DEBUG_PROJECTILES and "ON" or "OFF"))
+            Debug.log("Projectiles debug: " .. (DEBUG_PROJECTILES and "ON" or "OFF"))
         end
     end
 end

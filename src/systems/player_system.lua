@@ -5,6 +5,7 @@ local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
 local Event = require("lib.event")
+local Debug = require("src.debug")
 
 -- Constants
 local TUNING = Config.TUNING.PLAYER
@@ -55,7 +56,7 @@ function PlayerSystem:applyDamage(amount, source)
         
         -- Debug output with damage source
         if _G.DEBUG_MASTER and _G.DEBUG_HP then
-            print(string.format("Player took %d damage from %s! HP: %d/%d", 
+            Debug.log(string.format("Player took %d damage from %s! HP: %d/%d", 
                 amount, source or "unknown", self.player.currentHP, self.player.maxHP))
         end
         

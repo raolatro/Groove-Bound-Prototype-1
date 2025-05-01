@@ -57,8 +57,8 @@ function XPBar:draw()
         return
     end
     
-    -- Skip if no level up system reference
-    if not self.levelUpSystem then
+    -- Skip if no level up system reference or level data
+    if not self.levelUpSystem or not self.levelData then
         return
     end
     
@@ -66,8 +66,8 @@ function XPBar:draw()
     local r, g, b, a = love.graphics.getColor()
     local font = love.graphics.getFont()
     
-    -- Get level info
-    local levelInfo = self.levelUpSystem:getLevelInfo()
+    -- Use cached level info
+    local levelInfo = self.levelData
     local progress = levelInfo.progress
     
     -- Draw XP bar background
@@ -108,7 +108,18 @@ end
 
 -- Update the XP bar (for animations, etc.)
 function XPBar:update(dt)
-    -- For future animations
+    -- Skip if not initialized
+    if not self.initialized or not self.levelUpSystem then
+        return
+    end
+    
+    -- Cache the level data for this frame
+    self.levelData = self.levelUpSystem:getLevelInfo()
+    
+    -- Update width based on screen size (responsive UI)
+    self.width = math.min(300, love.graphics.getWidth() * 0.3)
+    self.x = 20
+    self.y = love.graphics.getHeight() - 50
 end
 
 -- Toggle visibility

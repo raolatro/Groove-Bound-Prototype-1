@@ -4,6 +4,7 @@
 local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
+local Debug = require("src.debug")
 
 -- Constants
 local TUNING = Config.TUNING
@@ -24,7 +25,7 @@ function EnemyProjectile:initPool()
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print("Enemy Projectile pool initialized")
+        Debug.log("Enemy Projectile pool initialized")
     end
 end
 
@@ -32,7 +33,7 @@ end
 function EnemyProjectile:spawn(x, y, dirX, dirY, settings)
     -- Parameter validation
     if not (x and y and dirX and dirY and settings) then
-        print("ERROR: Enemy projectile spawn missing parameters")
+        Debug.log("ERROR: Enemy projectile spawn missing parameters")
         return nil
     end
     
@@ -69,8 +70,8 @@ function EnemyProjectile:spawn(x, y, dirX, dirY, settings)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print(string.format("Spawned enemy projectile at (%.1f, %.1f) with damage: %d", 
-            x, y, proj.damage))
+        Debug.log(string.format("Spawned enemy projectile at (%.1f, %.1f) with damage: %d", 
+            x, y, proj.damage or 0))
     end
     
     return proj
@@ -215,7 +216,7 @@ end
 function EnemyProjectile:clearAll()
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_PROJECTILES then
-        print("Clearing all enemy projectiles: " .. #activeProjectiles)
+        Debug.log("Clearing all enemy projectiles: " .. #activeProjectiles)
     end
     
     -- Move all active projectiles back to the pool

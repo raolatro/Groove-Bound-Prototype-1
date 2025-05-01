@@ -2,8 +2,9 @@
 -- Manages XP gems, attraction, and level-up tracking
 
 local L = require("lib.loader")
-local Config = require("config.settings")
 local PATHS = require("config.paths")
+local Config = require("config.settings")
+local Debug = require("src.debug")
 local XPGem = require("src.entities.xp_gem")
 
 -- Import events system
@@ -65,8 +66,8 @@ function GemSystem:init(player, levelSystem)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print("Gem System initialized")
-        print("XP for level 2: " .. self.xpForNextLevel)
+        Debug.log("Gem System initialized")
+        Debug.log("XP for level 2: " .. self.xpForNextLevel)
     end
     
     return self
@@ -89,7 +90,7 @@ function GemSystem:setupEvents()
         if cause ~= "playerProjectile" then
             -- Debug output for non-projectile kills (no gems)
             if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-                print(string.format("No gems spawned for %s kill (cause: %s)", 
+                Debug.log(string.format("No gems spawned for %s kill (cause: %s)", 
                     enemy.displayName or "unknown enemy", cause))
             end
             return
@@ -100,7 +101,7 @@ function GemSystem:setupEvents()
         
         -- Debug output
         if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-            print(string.format("Spawning %d gems from %s (projectile kill)", 
+            Debug.log(string.format("Spawning %d gems from %s (projectile kill)", 
                 gemCount, enemy.displayName or "unknown enemy"))
         end
         
@@ -120,7 +121,7 @@ function GemSystem:setupEvents()
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print("Gem System event listeners set up")
+        Debug.log("Gem System event listeners set up")
     end
 end
 
@@ -131,29 +132,29 @@ function GemSystem:addXP(amount)
         return
     end
     
-    -- Add to current and total XP
-    self.currentXP = self.currentXP + amount
+    -- Keep track of total XP for stats
     self.totalXP = self.totalXP + amount
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print(string.format("Added %d XP. Current: %d/%d, Total: %d", 
-            amount, self.currentXP, self.xpForNextLevel, self.totalXP))
+        Debug.log(string.format("GemSystem: Collected %d XP", amount))
     end
     
-    -- Check for level up
-    if self.currentXP >= self.xpForNextLevel then
-        self:levelUp()
-    end
-    
-    -- Update level system if available
-    if self.levelSystem and self.levelSystem.setXP then
-        -- Make sure the system has the method before calling it
-        self.levelSystem:setXP(self.currentXP, self.xpForNextLevel)
+    -- Let the LevelUpSystem handle all XP tracking and level ups
+    if self.levelSystem then
+        local success, message = self.levelSystem:addXP(amount)
         
-        -- Debug output for XP sync
         if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-            print(string.format("Syncing XP with LevelSystem: %d/%d", self.currentXP, self.xpForNextLevel))
+            if success then
+                Debug.log("GemSystem: Successfully sent XP to LevelUpSystem - " .. message)
+            else
+                Debug.log("GemSystem: Failed to add XP to LevelUpSystem - " .. (message or "Unknown error"))
+            end
+        end
+    else
+        -- Fallback if no level system (shouldn't happen)
+        if _G.DEBUG_MASTER then
+            Debug.log("WARNING: GemSystem has no LevelUpSystem reference!")
         end
     end
 end
@@ -174,7 +175,7 @@ function GemSystem:levelUp()
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print(string.format("LEVEL UP! Now level %d. XP: %d/%d", 
+        Debug.log(string.format("LEVEL UP! Now level %d. XP: %d/%d", 
             self.currentLevel, self.currentXP, self.xpForNextLevel))
     end
     

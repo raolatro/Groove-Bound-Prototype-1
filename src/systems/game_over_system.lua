@@ -5,6 +5,7 @@ local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
 local Event = require("lib.event")
+local Debug = require("src.debug")
 local Gamestate = L.Gamestate  -- Import Gamestate from loader
 
 -- Define events
@@ -243,7 +244,7 @@ function GameOverSystem:restartGame()
             currentState.cameraResetNeeded = true
             
             if _G.DEBUG_MASTER then
-                print("Camera reset flag set in GamePlay state")
+                Debug.log("Camera reset flag set in GamePlay state")
             end
         end
     end
@@ -267,7 +268,7 @@ function GameOverSystem:purgeEntities()
         
         -- Debug output
         if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-            print("Cleared all enemies for game restart")
+            Debug.log("Cleared all enemies for game restart")
         end
     end
     
@@ -320,7 +321,7 @@ function GameOverSystem:resetPlayer()
         end
         
         if _G.DEBUG_MASTER then
-            print("Starting 1-second camera transition to player at: " .. centerX .. "," .. centerY)
+            Debug.log("Starting 1-second camera transition to player at: " .. centerX .. "," .. centerY)
         end
     end
     
@@ -343,12 +344,14 @@ end
 function GameOverSystem:resetSystems()
     if not self.gameSystems then return end
     
-    -- Reset level system
+    -- Reset level system using proper reset method
     if self.gameSystems.levelUpSystem then
-        self.gameSystems.levelUpSystem.currentXP = 0
-        self.gameSystems.levelUpSystem.currentLevel = 1
-        self.gameSystems.levelUpSystem.xpToNextLevel = 100
-        self.gameSystems.levelUpSystem.isLevelingUp = false
+        self.gameSystems.levelUpSystem:reset()
+        
+        -- Force UI refresh
+        if _G.DEBUG_MASTER then
+            Debug.log("GameOverSystem: Reset level-up system to level 1")
+        end
     end
     
     -- Reset enemy spawner

@@ -1,6 +1,8 @@
 -- enemy_defs.lua
 -- Defines all enemy types for Groove Bound
 
+local Debug = require("src.debug")
+
 -- Helper function to convert RGB values (0-255) to LÖVE format (0-1)
 local function rgb(r, g, b)
     return {r/255, g/255, b/255, 1}
@@ -133,7 +135,7 @@ local function validateAll()
         count = count + 1
     end
     
-    print("Validated " .. count .. " enemy definitions")
+    Debug.log("Validated " .. count .. " enemy definitions")
     return true
 end
 

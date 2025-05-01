@@ -59,12 +59,27 @@ local Config = {
             BASE_XP = 50,                -- XP per gem before multiplier
             ATTRACT_RADIUS = 350,        -- px; dashed circle debug
             ATTRACT_SPEED = 600          -- px/s toward player
+        },
+        
+        -- Luck and rarity settings
+        LUCK = {
+            BASE = { common = 0.70, rare = 0.20, epic = 0.08, legendary = 0.02 },  -- Base rarity weights
+            SHIFT = { common = -0.004, rare = 0.0025, epic = 0.0012, legendary = 0.0003 }, -- Per +1 luck
+            MIN_COMMON = 0.20,         -- Common items will never drop below this threshold
+            MAX_LEGENDARY = 0.25       -- Legendary items will never exceed this threshold
+        },
+        
+        -- Level-up shop settings
+        SHOP = {
+            NUM_CARDS = 3,              -- Number of cards to display in the level-up shop
+            REROLL_COST = 0,            -- Coin cost to reroll shop options (placeholder for future)
+            FLASH_TIME = 1.0            -- Duration of the white flash when leveling up in seconds
         }
     },
     
     -- Development settings
     DEV = {
-        DEBUG_MASTER = true,      -- Always on during prototype phase
+        DEBUG_MASTER = false,      -- Always on during prototype phase
         DEBUG_PLAYER = true,      -- Player-specific debug toggle (Shift+F3)
         DEBUG_PHYSICS = true,     -- Physics debug toggle
         DEBUG_ASSETS = true,      -- Asset debug toggle
@@ -80,6 +95,7 @@ local Config = {
         DEBUG_CAMERA = true,      -- Camera debug (always on)
         DEBUG_COLLISION = true,   -- Collision debug (always on)
         DEBUG_FPS = false,         -- Show FPS counter
+
         RANDOMIZE_ENEMIES = true, -- Randomize enemy size and color within range
         INVINCIBLE = false,        -- Player invincibility for testing
         LOG_LEVEL = "info",       -- log, info, warn, error

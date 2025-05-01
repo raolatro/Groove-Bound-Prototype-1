@@ -4,6 +4,7 @@
 local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
+local Debug = require("src.debug")
 
 -- Import events system
 local Event = require("lib.event")
@@ -34,7 +35,7 @@ function XPGem:initPool()
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print("XP Gem pool initialized")
+        Debug.log("XP Gem pool initialized")
     end
 end
 
@@ -73,7 +74,7 @@ function XPGem:new(x, y, value, baseColor)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print(string.format("Spawned XP gem at (%.1f, %.1f) with value: %d", x, y, gem.value))
+        Debug.log(string.format("Spawned XP gem at (%.1f, %.1f) with value: %d", x, y, gem.value))
     end
     
     return gem
@@ -141,12 +142,12 @@ function XPGem:updateAll(dt, player)
             
             -- Debug output for gem collection
             if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-                print(string.format("Collected gem worth %d XP at distance %.1f", gem.value, dist))
+                Debug.log(string.format("Collected gem worth %d XP at distance %.1f", gem.value, dist))
             end
             
             -- Debug output
             if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-                print(string.format("Collected XP gem with value: %d", gem.value))
+                Debug.log(string.format("Collected XP gem with value: %d", gem.value))
             end
             
             -- Deactivate gem
@@ -264,7 +265,7 @@ function XPGem:spawnMultiple(x, y, count, valuePerGem)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print(string.format("Spawned %d gems at (%.1f, %.1f) with total value: %d", 
+        Debug.log(string.format("Spawned %d gems at (%.1f, %.1f) with total value: %d", 
             count, x, y, count * valuePerGem))
     end
 end
@@ -273,7 +274,7 @@ end
 function XPGem:clearAll()
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_GEMS then
-        print("Clearing all active XP gems: " .. #activeGems)
+        Debug.log("Clearing all active XP gems: " .. #activeGems)
     end
     
     -- Move all active gems back to the pool

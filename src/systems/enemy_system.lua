@@ -5,6 +5,7 @@ local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
 local EnemyDefs = require("src.data.enemy_defs")
+local Debug = require("src.debug")
 
 -- Import events system
 local Event = require("lib.event")
@@ -51,7 +52,7 @@ function EnemySystem:init(player, world)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print("Enemy System initialized")
+        Debug.log("Enemy System initialized")
     end
     
     return self
@@ -62,7 +63,7 @@ function EnemySystem:setProjectileSystem(projectileSystem)
     self.enemyProjectileSystem = projectileSystem
     
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print("Enemy Projectile System reference set")
+        Debug.log("Enemy Projectile System reference set")
     end
 end
 
@@ -70,7 +71,7 @@ end
 function EnemySystem:spawn(enemyDef, x, y)
     -- Validate parameters
     if not enemyDef or not x or not y then
-        print("Error: Missing parameters for enemy spawn")
+        Debug.log("Error: Missing parameters for enemy spawn")
         return nil
     end
     
@@ -137,7 +138,7 @@ function EnemySystem:spawn(enemyDef, x, y)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print(string.format("Spawned %s enemy at (%.1f, %.1f) with HP: %d", 
+        Debug.log(string.format("Spawned %s enemy at (%.1f, %.1f) with HP: %d", 
             enemy.displayName, enemy.x, enemy.y, enemy.hp))
     end
     
@@ -388,7 +389,7 @@ function EnemySystem:checkPlayerCollision(enemy, dt)
             
             -- Debug output in fallback mode
             if damageApplied and _G.DEBUG_MASTER and _G.DEBUG_HP then
-                print(string.format("Player hit by %s for %d damage (FALLBACK PATH)", 
+                Debug.log(string.format("Player hit by %s for %d damage (FALLBACK PATH)", 
                     enemy.displayName, contactDamage))
             end
         end
@@ -418,7 +419,7 @@ function EnemySystem:applyDamage(enemy, damage, source)
     
     -- Debug output
     if _G.DEBUG_MASTER and (_G.DEBUG_ENEMIES or _G.DEBUG_HP) then
-        print(string.format("%s took %d damage from %s! HP: %d/%d", 
+        Debug.log(string.format("%s took %d damage from %s! HP: %d/%d", 
             enemy.displayName, damage, source or "unknown", enemy.hp, enemy.maxHp))
     end
     
@@ -449,7 +450,7 @@ function EnemySystem:killEnemy(enemy, cause)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print(string.format("%s was killed by %s at position (%.1f, %.1f)!", 
+        Debug.log(string.format("%s was killed by %s at position (%.1f, %.1f)!", 
             enemy.displayName, cause or "unknown", enemy.x, enemy.y))
     end
     
@@ -490,7 +491,7 @@ function EnemySystem:checkProjectileCollisions(projectiles)
                             
                             -- Debug output for piercing
                             if _G.DEBUG_MASTER and _G.DEBUG_HP then
-                                print(string.format("Projectile pierced through! Remaining pierces: %d", proj.piercing))
+                                Debug.log(string.format("Projectile pierced through! Remaining pierces: %d", proj.piercing))
                             end
                         else
                             -- If no piercing, deactivate the projectile
@@ -499,7 +500,7 @@ function EnemySystem:checkProjectileCollisions(projectiles)
                         
                         -- Debug output
                         if _G.DEBUG_MASTER and _G.DEBUG_HP then
-                            print(string.format("Enemy %s hit for %d damage", 
+                            Debug.log(string.format("Enemy %s hit for %d damage", 
                                 enemy.displayName, proj.damage))
                         end
                     end

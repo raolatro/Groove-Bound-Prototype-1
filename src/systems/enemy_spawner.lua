@@ -5,6 +5,7 @@ local L = require("lib.loader")
 local Config = require("config.settings")
 local PATHS = require("config.paths")
 local EnemyDefs = require("src.data.enemy_defs")
+local Debug = require("src.debug")
 
 -- Constants
 local TUNING = Config.TUNING.ENEMIES
@@ -49,7 +50,7 @@ function EnemySpawner:init(player, enemySystem, world)
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print("Enemy Spawner initialized with " .. #EnemyDefs.enemies .. " enemy types")
+        Debug.log("Enemy Spawner initialized with " .. #EnemyDefs.enemies .. " enemy types")
     end
     
     return self
@@ -73,7 +74,7 @@ function EnemySpawner:buildWeightedTable()
     end
     
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print("Built weighted enemy table with total weight: " .. self.totalWeight)
+        Debug.log("Built weighted enemy table with total weight: " .. self.totalWeight)
     end
 end
 
@@ -158,7 +159,7 @@ function EnemySpawner:spawnRandomEnemy()
     local enemyDef = self:selectRandomEnemy()
     if not enemyDef then
         if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-            print("No enemy definitions available to spawn")
+            Debug.log("No enemy definitions available to spawn")
         end
         return
     end
@@ -167,7 +168,7 @@ function EnemySpawner:spawnRandomEnemy()
     local spawnX, spawnY = self:findSpawnPosition()
     if not spawnX or not spawnY then
         if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-            print("Failed to find valid spawn position")
+            Debug.log("Failed to find valid spawn position")
         end
         return
     end
@@ -177,8 +178,8 @@ function EnemySpawner:spawnRandomEnemy()
     
     -- Debug output
     if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-        print(string.format("Spawned enemy: %s at position (%d, %d)", 
-              enemyDef.displayName, math.floor(spawnX), math.floor(spawnY)))
+        Debug.log(string.format("Spawned enemy: %s at position (%d, %d)", 
+            enemyDef.displayName, math.floor(spawnX), math.floor(spawnY)))
     end
     
     return enemy

@@ -3,6 +3,7 @@
 
 local L = require("lib.loader")
 local PATHS = require("config.paths")
+local Debug = require("src.debug")
 
 -- Get reference to global Debug flags
 -- These are defined in main.lua as globals
@@ -77,8 +78,8 @@ function GameSystems:init(player)
     -- (we need to initialize passive system first to get buffs)
     self.weaponSystem = WeaponSystem:init(player, self.passiveSystem:getBuffs())
     
-    -- Initialize level-up system with references to both systems
-    self.levelUpSystem = LevelUpSystem:init(self.weaponSystem, self.passiveSystem)
+    -- Initialize level-up system with references to both systems and player
+    self.levelUpSystem = LevelUpSystem:init(self.weaponSystem, self.passiveSystem, player)
     
     -- Initialize enemy systems
     EnemyProjectile:initPool() -- Initialize enemy projectile pool
@@ -130,7 +131,7 @@ function GameSystems:init(player)
     -- Add starter weapon
     local success, message = self.weaponSystem:addWeapon("pistol")
     if debugEnabled then
-        print("Starter weapon: " .. message)
+        Debug.log("Starter weapon: " .. message)
     end
     
     -- Mark as initialized
@@ -146,104 +147,113 @@ end
 
 -- Update all systems
 function GameSystems:update(dt)
+    -- Use pcall for all method calls to prevent errors
+    local function safeCall(obj, method, ...)
+        if obj and type(obj[method]) == "function" then
+            local success, result = pcall(obj[method], obj, ...)
+            if not success and _G.DEBUG_MASTER then
+                Debug.log("Error calling " .. method .. ": " .. tostring(result))
+            end
+            return success, result
+        end
+        return false
+    end
+    
     -- Check if initialized
     if not self.initialized then
         return
     end
     
-    -- Update game timer (used for stats)
-    self.gameTimer = self.gameTimer + dt
+    -- Check if level-up shop is active (safely)
+    local isLevelUpActive = self.levelUpSystem and 
+                          (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive)
     
-    -- Update game over system first to check state
-    if self.gameOverSystem then
-        self.gameOverSystem:update(dt)
-    end
+    -- Don't update gameplay systems if in level-up shop or game over
+    local pauseGameplay = isLevelUpActive or 
+                        (self.gameOverSystem and self.gameOverSystem.isGameOver)
     
-    -- If game is over, only update specific systems
-    if self.gameOverSystem and self.gameOverSystem.isGameOver then
-        -- Only update UI components when game is over
-        if self.xpBar then self.xpBar:update(dt) end
-        if self.hpBar then self.hpBar:update(dt) end
+    -- Always update level-up system and game over system first
+    safeCall(self.levelUpSystem, "update", dt)
+    safeCall(self.gameOverSystem, "update", dt)
+    
+    -- Update UI components that should always update
+    safeCall(self.xpBar, "update", dt)
+    safeCall(self.hpBar, "update", dt)
+    
+    -- If game over or level-up shop is active, bail out early
+    if pauseGameplay then
         return
     end
     
-    -- Get player position and aim for weapon updates
-    local x, y
-    local aimX, aimY = 0, 0
+    -- Update game timer
+    self.gameTimer = (self.gameTimer or 0) + dt
     
+    -- Get player position and aim safely
+    local x, y, aimX, aimY
     if self.player then
         if self.player.collider then
             x, y = self.player.collider:getPosition()
         else
-            x, y = self.player.x, self.player.y
+            x, y = self.player.x or 0, self.player.y or 0
         end
-        
         aimX, aimY = self.player.aimX or 0, self.player.aimY or 0
     end
     
-    -- Update weapon system with player position and aim
-    if x and y then
-        self.weaponSystem:update(dt, x, y, aimX, aimY, self.player, self.passiveSystem:getBuffs())
+    -- Get passive buffs safely
+    local buffs = {}
+    if self.passiveSystem then
+        local success, result = safeCall(self.passiveSystem, "getBuffs")
+        if success then buffs = result end
     end
+    
+    -- Update core gameplay systems safely
+    if self.weaponSystem and x and y then
+        safeCall(self.weaponSystem, "update", dt, x, y, aimX, aimY, self.player, buffs)
+    else
+        safeCall(self.weaponSystem, "update", dt)
+    end
+    
+    safeCall(self.passiveSystem, "update", dt)
+    safeCall(self.enemySystem, "update", dt)
+    safeCall(self.enemyProjectileSystem, "updateAll", dt)
+    safeCall(self.enemySpawner, "update", dt)
+    safeCall(self.gemSystem, "update", dt)
     
     -- Update UI components
-    self.inventoryGrid:update(dt)
-    self.levelUpPanel:update(dt)
-    self.xpBar:update(dt)
-    self.hpBar:update(dt)
+    safeCall(self.inventoryGrid, "update", dt)
+    safeCall(self.levelUpPanel, "update", dt)
     
-    -- Update enemy systems
-    self.enemySpawner:update(dt)
-    self.enemySystem:update(dt)
-    self.enemyProjectileSystem:updateAll(dt)
-    
-    -- Update gem system
-    self.gemSystem:update(dt)
-    
-    -- Check for collisions between player projectiles and enemies
+    -- Handle collisions safely
     if self.weaponSystem and self.enemySystem then
-        -- Get active projectiles from weapon system
-        local projectiles = Projectile.activeProjectiles
-        
-        -- Check collisions
-        self.enemySystem:checkProjectileCollisions(projectiles)
+        local projectiles = {}
+        if Projectile and Projectile.activeProjectiles then
+            projectiles = Projectile.activeProjectiles
+        end
+        safeCall(self.enemySystem, "checkProjectileCollisions", projectiles)
     end
     
-    -- Check for collisions between enemy projectiles and player
-    if self.enemyProjectileSystem and not Config.DEV.INVINCIBLE then
-        -- Check collisions
-        local damage = self.enemyProjectileSystem:checkPlayerCollision(self.player)
-        
-        -- If player was hit and damage returned, apply it
-        if damage and damage > 0 then
-            -- This is where you would apply damage to the player
-            -- For now, just log it
-            if _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
-                print("Player took " .. damage .. " damage from enemy projectile!")
+    -- Handle enemy projectile collisions
+    if self.enemyProjectileSystem and self.player then
+        local invincible = Config and Config.DEV and Config.DEV.INVINCIBLE
+        if not invincible then
+            local success, damage = safeCall(self.enemyProjectileSystem, "checkPlayerCollision", self.player)
+            if success and damage and damage > 0 and _G.DEBUG_MASTER and _G.DEBUG_ENEMIES then
+                Debug.log("Player took " .. damage .. " damage from enemy projectile!")
             end
         end
     end
     
-    -- Debug XP addition with K key
-    if _G.DEBUG_MASTER and _G.DEBUG_WEAPONS and love.keyboard.isDown("k") then
-        self.levelUpSystem:addXP(self.debugStats.xpToAdd)
+    -- Debug XP addition
+    if self.levelUpSystem and self.debugStats and _G.DEBUG_MASTER and 
+       _G.DEBUG_WEAPONS and love.keyboard.isDown("k") then
+        safeCall(self.levelUpSystem, "addXP", self.debugStats.xpToAdd or 10)
     end
     
-    -- Check if player is asking to fire weapon with space or mouse button
-    if love.keyboard.isDown("space") or love.mouse.isDown(1) then
-        -- Get player position and aim
-        local x, y
-        if self.player.collider then
-            x, y = self.player.collider:getPosition()
-        else
-            x, y = self.player.x, self.player.y
-        end
-        
-        -- Make sure we have aim values
-        local aimX, aimY = self.player.aimX or 0, self.player.aimY or 0
-        
-        -- Fire the current weapon with passive buffs
-        self.weaponSystem:fireWeapon(1, x, y, aimX, aimY, self.player, self.passiveSystem:getBuffs())
+    -- Handle weapon firing
+    if self.weaponSystem and self.player and 
+       (love.keyboard.isDown("space") or love.mouse.isDown(1)) and
+       x and y and aimX and aimY then
+        safeCall(self.weaponSystem, "fireWeapon", 1, x, y, aimX, aimY, self.player, buffs)
     end
 end
 
@@ -294,22 +304,29 @@ function GameSystems:drawUI()
         return
     end
     
-    -- Draw standard UI components
-    if self.inventoryGrid then
+    -- Draw inventory grid (if not game over or in level-up)
+    local isInShop = self.levelUpSystem and (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive)
+    if self.inventoryGrid and not (self.gameOverSystem and self.gameOverSystem.isGameOver) and not isInShop then
         self.inventoryGrid:draw()
     end
     
-    if self.xpBar then
+    -- Always draw XP and HP bars (unless in level-up shop)
+    if self.xpBar and not isInShop then
         self.xpBar:draw()
     end
     
-    if self.hpBar then
+    if self.hpBar and not isInShop then
         self.hpBar:draw()
     end
     
-    -- Draw level up panel (if not game over)
-    if not (self.gameOverSystem and self.gameOverSystem.isGameOver) then
+    -- Draw level up panel (if not game over or in level-up shop)
+    if not (self.gameOverSystem and self.gameOverSystem.isGameOver) and not isInShop then
         self.levelUpPanel:draw()
+    end
+    
+    -- Draw level-up shop UI if active
+    if self.levelUpSystem then
+        self.levelUpSystem:draw()
     end
     
     -- Draw game over UI last (on top of everything)
@@ -327,6 +344,14 @@ function GameSystems:keypressed(key)
             self.gameOverSystem.gameMenu:keypressed(key)
         end
         return -- Don't process other input during game over
+    end
+    
+    -- Handle level-up shop input
+    if self.levelUpSystem and (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive) then
+        -- Forward key presses to level-up shop
+        if self.levelUpSystem:keypressed(key) then
+            return -- Input was handled by level-up shop
+        end
     end
     
     -- Debug keys for weapon testing
@@ -387,6 +412,14 @@ function GameSystems:mousepressed(x, y, button)
         end
         return -- Don't process other input during game over
     end
+    
+    -- Handle level-up shop input
+    if self.levelUpSystem and (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive) then
+        -- Forward mouse presses to level-up shop
+        if self.levelUpSystem:mousepressed(x, y, button) then
+            return -- Input was handled by level-up shop
+        end
+    end
 end
 
 -- Handle gamepad button press events
@@ -403,6 +436,14 @@ function GameSystems:gamepadpressed(joystick, button)
             self.gameOverSystem.gameMenu:gamepadpressed(joystick, button)
         end
         return -- Don't process other input during game over
+    end
+    
+    -- Handle level-up shop input
+    if self.levelUpSystem and (self.levelUpSystem.shopOpen or self.levelUpSystem.flashActive) then
+        -- Forward gamepad presses to level-up shop
+        if self.levelUpSystem:gamepadpressed(joystick, button) then
+            return -- Input was handled by level-up shop
+        end
     end
 end
 

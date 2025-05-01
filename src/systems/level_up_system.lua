@@ -4,6 +4,14 @@
 local L = require("lib.loader")
 local PATHS = require("config.paths")
 local ItemDefs = require("src.data.item_defs")
+local LevelUpShop = require("src.ui.level_up_shop")
+local Config = require("config.settings")
+local Event = require("lib.event")
+local Debug = require("src.debug")
+
+-- Local shorthand
+local TUNING = Config.TUNING
+local DEV = Config.DEV
 
 -- The LevelUpSystem module
 local LevelUpSystem = {
@@ -19,6 +27,16 @@ local LevelUpSystem = {
     -- References to other systems
     weaponSystem = nil,
     passiveSystem = nil,
+    player = nil,
+    
+    -- Shop system
+    shop = nil,
+    shopOpen = false,
+    
+    -- Flash effect
+    flashActive = false,
+    flashTimer = 0,
+    flashDuration = TUNING.SHOP.FLASH_TIME,
     
     -- Callbacks
     onLevelUp = nil,
@@ -29,10 +47,11 @@ local LevelUpSystem = {
 }
 
 -- Initialize the level-up system
-function LevelUpSystem:init(weaponSystem, passiveSystem)
+function LevelUpSystem:init(weaponSystem, passiveSystem, player)
     -- Store system references
     self.weaponSystem = weaponSystem
     self.passiveSystem = passiveSystem
+    self.player = player
     
     -- Reset state
     self.currentXP = 0
@@ -40,28 +59,74 @@ function LevelUpSystem:init(weaponSystem, passiveSystem)
     self.xpToNextLevel = 100
     self.isLevelingUp = false
     self.choices = {}
+    self.shopOpen = false
+    self.flashActive = false
+    self.flashTimer = 0
+    
+    -- Initialize level-up shop
+    self.shop = LevelUpShop:init(player, self)
+    
+    -- Register for shop closure event
+    local Event = require("lib.event")
+    Event.subscribe("LEVEL_UP_SHOP_CLOSED", function(data)
+        self.shopOpen = false
+        self.isLevelingUp = false
+    end)
     
     -- Mark as initialized
     self.initialized = true
+    
+    if DEV.DEBUG_MASTER then
+        Debug.log("LevelUpSystem initialized with shop")
+    end
     
     return self
 end
 
 -- Calculate XP needed for a given level
 function LevelUpSystem:calculateXPForLevel(level)
-    -- Simple exponential scaling formula
-    return math.floor(100 * math.pow(1.2, level - 1))
+    -- More linear scaling formula with reasonable progression
+    -- Start at 100, then add 25 per level
+    local baseXP = 100
+    local xpPerLevel = 25
+    local xpNeeded = baseXP + (xpPerLevel * (level - 1))
+    
+    if DEV.DEBUG_MASTER then
+        Debug.log(string.format("LevelUpSystem: XP needed for level %d = %d", level, xpNeeded))
+    end
+    
+    return xpNeeded
 end
 
 -- Add XP to the player
 function LevelUpSystem:addXP(amount)
     -- Check if initialized
     if not self.initialized then
+        Debug.log("Level-up system not initialized")
         return false, "Level-up system not initialized"
     end
     
-    -- Add XP
+    -- Skip if level-up shop is open or flash is active
+    if self.shopOpen or self.flashActive or self.isLevelingUp then
+        if DEV.DEBUG_MASTER then
+            Debug.log("LevelUpSystem: Skipping XP add - level up in progress")
+        end
+        return false, "Level-up in progress"
+    end
+    
+    -- Validate input
+    if not amount or type(amount) ~= "number" or amount <= 0 then
+        return false, "Invalid XP amount"
+    end
+    
+    -- Add XP with debug info
+    local oldXP = self.currentXP
     self.currentXP = self.currentXP + amount
+    
+    if DEV.DEBUG_MASTER then
+        Debug.log(string.format("⭐ LevelUpSystem: Added %d XP. Now %d/%d XP (Level %d)", 
+                           amount, self.currentXP, self.xpToNextLevel, self.currentLevel))
+    end
     
     -- Check for level up
     if self.currentXP >= self.xpToNextLevel then
@@ -74,6 +139,11 @@ function LevelUpSystem:addXP(amount)
         -- Set new XP threshold
         self.currentXP = surplus
         self.xpToNextLevel = self:calculateXPForLevel(self.currentLevel + 1)
+        
+        if DEV.DEBUG_MASTER then
+            Debug.log(string.format("🔥 LevelUpSystem: LEVEL UP! Now level %d with %d surplus XP. Next level at %d XP", 
+                                self.currentLevel, surplus, self.xpToNextLevel))
+        end
         
         -- Trigger level up sequence
         self:triggerLevelUp()
@@ -105,16 +175,148 @@ end
 
 -- Trigger the level-up sequence
 function LevelUpSystem:triggerLevelUp()
+    -- Skip if already leveling up
+    if self.isLevelingUp or self.shopOpen or self.flashActive then
+        if DEV.DEBUG_MASTER then
+            Debug.log("LevelUpSystem: Skipping trigger - already in level-up process")
+        end
+        return
+    end
+    
     -- Set leveling up state
     self.isLevelingUp = true
     
-    -- Generate choices
-    self:generateChoices()
+    -- Start the flash effect
+    self.flashActive = true
+    self.flashTimer = 0
+    self.flashDuration = TUNING.SHOP.FLASH_TIME
     
-    -- Call the level up callback if provided
-    if self.onLevelUp then
-        self.onLevelUp(self.currentLevel, self.choices)
+    -- Trigger shop flash effect
+    if self.shop then
+        self.shop:startFlash(self.flashDuration)
     end
+    
+    -- Dispatch event to pause gameplay
+    Event.dispatch("LEVEL_UP_STARTED", {})
+    
+    if DEV.DEBUG_MASTER then
+        Debug.log("LevelUpSystem: Level up triggered, starting flash effect")
+    end
+    
+    -- Call the level up callback if provided (legacy support)
+    if self.onLevelUp then
+        self.onLevelUp(self.currentLevel, nil)
+    end
+end
+
+-- Get current level information for UI
+function LevelUpSystem:getLevelInfo()
+    -- Calculate progress percentage for UI bar
+    local progress = self.currentXP / self.xpToNextLevel
+    if progress > 1 then progress = 1 end
+    
+    -- Return complete level info object
+    return {
+        level = self.currentLevel,
+        currentXP = self.currentXP,
+        nextLevelXP = self.xpToNextLevel,
+        progress = progress
+    }
+end
+
+-- Reset the level-up system (called on game restart)
+function LevelUpSystem:reset()
+    -- Reset XP and level
+    self.currentXP = 0
+    self.currentLevel = 1
+    self.xpToNextLevel = self:calculateXPForLevel(2) -- Reset to level 2 threshold
+    
+    -- Reset state flags
+    self.isLevelingUp = false
+    self.shopOpen = false
+    self.flashActive = false
+    self.flashTimer = 0
+    
+    -- Also reset the shop if it exists
+    if self.shop then
+        self.shop.isOpen = false
+    end
+    
+    if DEV.DEBUG_MASTER then
+        Debug.log("LevelUpSystem: Reset to Level 1 (0/" .. self.xpToNextLevel .. " XP)")
+    end
+    
+    return self
+end
+
+-- Update the level-up system
+function LevelUpSystem:update(dt)
+    -- Skip if not initialized
+    if not self.initialized then
+        return
+    end
+    
+    -- Handle flash effect
+    if self.flashActive then
+        self.flashTimer = self.flashTimer + dt
+        
+        -- When flash completes, open the shop
+        if self.flashTimer >= self.flashDuration then
+            self.flashActive = false
+            if self.shop and not self.shopOpen then
+                self.shopOpen = true
+                self.shop:open(self.player)
+            end
+        end
+    end
+    
+    -- Update shop if open
+    if self.shop and (self.shopOpen or self.flashActive) then
+        self.shop:update(dt)
+    end
+end
+
+-- Draw the level-up UI
+function LevelUpSystem:draw()
+    -- Skip if not initialized
+    if not self.initialized then
+        return
+    end
+    
+    -- Draw shop if open or flashing
+    if self.shop and (self.shopOpen or self.flashActive) then
+        self.shop:draw()
+    end
+end
+
+-- Handle keyboard input for the shop
+function LevelUpSystem:keypressed(key)
+    -- Skip if shop not open
+    if not self.shopOpen or not self.shop then
+        return false
+    end
+    
+    return self.shop:keypressed(key)
+end
+
+-- Handle gamepad input for the shop
+function LevelUpSystem:gamepadpressed(gamepad, button)
+    -- Skip if shop not open
+    if not self.shopOpen or not self.shop then
+        return false
+    end
+    
+    return self.shop:gamepadpressed(gamepad, button)
+end
+
+-- Handle mouse input for the shop
+function LevelUpSystem:mousepressed(x, y, button)
+    -- Skip if shop not open
+    if not self.shopOpen or not self.shop then
+        return false
+    end
+    
+    return self.shop:mousepressed(x, y, button)
 end
 
 -- Generate level-up choices

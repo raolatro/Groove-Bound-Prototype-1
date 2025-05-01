@@ -59,7 +59,7 @@ function Debug.draw()
     
     -- Initialize font if not already loaded
     if not Debug.font then
-        Debug.font = love.graphics.newFont(12)
+        Debug.font = love.graphics.newFont(11) -- Slightly larger font for better visibility
     end
     
     -- Save current font and color
@@ -69,29 +69,47 @@ function Debug.draw()
     -- Set font
     love.graphics.setFont(Debug.font)
     
-    -- Draw message background
+    -- Draw message background with higher contrast
     if #Debug.messages > 0 then
-        love.graphics.setColor(0, 0, 0, 0.6)
+        love.graphics.setColor(0, 0, 0, 0.8) -- More opaque background
         love.graphics.rectangle(
             "fill", 
             10, 
             40, 
-            400, 
-            #Debug.messages * 16 + 10
+            500, -- Wider panel for longer messages
+            #Debug.messages * 18 + 10 -- Slightly taller rows
+        )
+        
+        -- Add border for visibility
+        love.graphics.setColor(1, 1, 0, 0.7) -- Yellow border
+        love.graphics.rectangle(
+            "line", 
+            10, 
+            40, 
+            500,
+            #Debug.messages * 18 + 10
         )
     end
     
-    -- Draw messages
+    -- Always show at least the master debug status
+    if #Debug.messages == 0 then
+        love.graphics.setColor(0, 0, 0, 0.8)
+        love.graphics.rectangle("fill", 10, 40, 180, 25)
+        love.graphics.setColor(1, 1, 0, 1)
+        love.graphics.print("Debug Mode Active", 15, 45)
+    end
+    
+    -- Draw messages with better contrast
     for i, message in ipairs(Debug.messages) do
-        -- Change color based on message freshness
-        local alpha = math.min(1, message.time / 2)
+        -- Brighter text with higher minimum alpha
+        local alpha = math.min(1, 0.7 + (message.time / 10))
         love.graphics.setColor(1, 1, 1, alpha)
         
         -- Draw text
         love.graphics.print(
             message.text, 
             15, 
-            40 + (i - 1) * 16 + 5
+            40 + (i - 1) * 18 + 5
         )
     end
     
@@ -106,12 +124,66 @@ function Debug.clear()
     Debug.log("Debug messages cleared")
 end
 
--- Handle key press
-function Debug.keypressed(key)
-    -- Handle F9 to clear debug messages
+-- Toggle any individual debug flag
+function Debug.toggleFlag(flagName)
+    if DEV[flagName] ~= nil then
+        DEV[flagName] = not DEV[flagName]
+        local status = DEV[flagName] and "ON" or "OFF"
+        Debug.log("Debug flag " .. flagName .. ": " .. status)
+        
+        -- If Master was turned off, clear messages
+        if flagName == "DEBUG_MASTER" and not DEV.DEBUG_MASTER then
+            Debug.messages = {}
+        end
+        
+        -- Sync the global flag if it exists
+        if _G[flagName] ~= nil then
+            _G[flagName] = DEV[flagName]
+        end
+        
+        return true
+    end
+    return false
+end
+
+-- Generate a comprehensive debug status report
+function Debug.showStatus()
+    if not DEV.DEBUG_MASTER then return end
+    
+    Debug.log("=== DEBUG STATUS ===")
+    for k, v in pairs(DEV) do
+        if k:match("^DEBUG_") then
+            local status = v and "ON" or "OFF"
+            Debug.log(k .. ": " .. status)
+        end
+    end
+    Debug.log("===================")
+end
+
+-- Key handler for debug toggles
+function Debug.keypressed(key, scancode, isrepeat)
+    if not key then return end
+    
+    -- Clear debug messages with F9
     if key == Config.CONTROLS.KEYBOARD.DEBUG.TOGGLE_DEBUG_CLEAR then
         Debug.clear()
+        return true
     end
+    
+    -- Master debug toggle with F3 (no shift)
+    if key == Config.CONTROLS.KEYBOARD.DEBUG.TOGGLE_MASTER and 
+       not love.keyboard.isDown("lshift", "rshift") then
+        Debug.toggleFlag("DEBUG_MASTER")
+        return true
+    end
+    
+    -- Show debug status with F1
+    if key == "f1" then
+        Debug.showStatus()
+        return true
+    end
+    
+    return false
 end
 
 return Debug
