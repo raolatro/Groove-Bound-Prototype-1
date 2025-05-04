@@ -100,18 +100,30 @@ function Input:getMovementDirection()
 end
 
 -- Get aim direction as a vector from player to mouse
--- @param playerX - Player X position
--- @param playerY - Player Y position
--- @return dx, dy - Direction vector from player to mouse
-function Input:getAimDirection(playerX, playerY)
-  local dx = self.mouseX - playerX
-  local dy = self.mouseY - playerY
+-- @param playerX - Player X position in world coordinates
+-- @param playerY - Player Y position in world coordinates
+-- @param camera - Optional camera reference for coordinate conversion
+-- @return dx, dy - Direction vector from player to mouse (normalized)
+function Input:getAimDirection(playerX, playerY, camera)
+  local targetX, targetY = self.mouseX, self.mouseY
   
-  -- Normalize
+  -- Convert screen mouse coordinates to world coordinates if camera is provided
+  if camera then
+    targetX, targetY = camera:screenToWorld(self.mouseX, self.mouseY)
+  end
+  
+  -- Get direction vector from player to target
+  local dx = targetX - playerX
+  local dy = targetY - playerY
+  
+  -- Normalize the vector
   local len = math.sqrt(dx * dx + dy * dy)
   if len > 0 then
     dx = dx / len
     dy = dy / len
+  else
+    -- Default to right direction if mouse is exactly on player
+    dx, dy = 1, 0
   end
   
   return dx, dy

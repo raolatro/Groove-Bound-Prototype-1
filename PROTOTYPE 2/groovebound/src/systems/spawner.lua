@@ -1,34 +1,44 @@
 -- Spawner system
 -- Handles spawning waves of enemies based on game time
+-- Implements gradual spawning from different directions around the arena
 
 local Enemy = require("src/entities/enemy")
+local Settings = require("src/core/settings")
 
 local Spawner = {}
 
 -- Create a new spawner
 -- @param player - Reference to the player entity
+-- @param arenaManager - Reference to the arena manager for positioning
 -- @return A new spawner object
-function Spawner.new(player)
+function Spawner.new(player, arenaManager)
+  -- Get spawner settings
+  local spawnerSettings = Settings.spawner
+  
   local self = {
-    player = player,      -- Reference to the player
-    gameTime = 0,         -- Current game time
-    enemies = {},         -- Table of active enemies
-    lastWaveTime = 0,     -- Time of the last spawned wave
+    player = player,              -- Reference to the player
+    arenaManager = arenaManager,  -- Reference to arena boundaries
+    gameTime = 0,                 -- Current game time in seconds
+    enemies = {},                 -- Table of active enemies
+    lastWaveTime = 0,             -- Time when last wave started
+    nextSpawnTime = 0,            -- Time for next individual enemy spawn
+    pendingSpawns = 0,            -- Number of enemies waiting to be spawned in current wave
+    waveInProgress = false,       -- Whether a wave is currently spawning
     
-    -- Time table for enemy spawns - {time, count} pairs
-    -- Waves will spawn at these time marks with the specified count
-    timetable = {
-      {t = 1, count = 5},
-      {t = 5, count = 10},
-      {t = 10, count = 15},
-      {t = 15, count = 20},
-      {t = 20, count = 25},
-      {t = 30, count = 30},
-      {t = 40, count = 35},
-      {t = 50, count = 40}
+    -- Spawn intervals
+    minSpawnInterval = spawnerSettings.min_spawn_interval, -- Minimum time between spawns
+    maxSpawnInterval = spawnerSettings.max_spawn_interval, -- Maximum time between spawns
+    
+    -- Wave configuration - enemies per wave at different time marks
+    waveConfig = {
+      {time = 1,  count = spawnerSettings.wave_sizes[1]},
+      {time = 15, count = spawnerSettings.wave_sizes[2]},
+      {time = 30, count = spawnerSettings.wave_sizes[3]},
+      {time = 45, count = spawnerSettings.wave_sizes[4]},
+      {time = 60, count = spawnerSettings.wave_sizes[5]}
     },
     
-    nextWaveIndex = 1,     -- Index to the next wave in the timetable
+    nextWaveIndex = 1,           -- Index of the next wave to spawn
     runDuration = 60,      -- Game run duration (from settings)
     spawnMultiplier = 1.0  -- Tunable spawn rate multiplier
   }
@@ -58,155 +68,135 @@ function Spawner:update(dt)
   -- Check if we should stop spawning (5 seconds before run end)
   local stopSpawnTime = self.runDuration - 5
   
-  -- For Phase 3, we'll continue spawning endlessly since boss isn't implemented yet
-  -- When Phase 4 adds the boss, we'll use the stopSpawnTime logic
+  -- Check for new waves to start
+  self:checkWaveStart()
   
-  -- Check if it's time for a new wave
-  if self.nextWaveIndex <= #self.timetable then
-    local nextWave = self.timetable[self.nextWaveIndex]
-    
-    if self.gameTime >= nextWave.t then
-      -- Spawn the wave
-      self:spawnWave(nextWave.count)
-      
-      -- Log the wave start
-      if Debug then
-        Debug.log("WAVE", "Wave " .. self.nextWaveIndex .. " started with " .. nextWave.count .. " enemies")
-      end
-      
-      -- Emit wave start event
-      if EventBus then
-        EventBus:emit("WAVE_START", {
-          wave = self.nextWaveIndex,
-          count = nextWave.count
-        })
-      end
-      
-      -- Move to the next wave
-      self.nextWaveIndex = self.nextWaveIndex + 1
-      self.lastWaveTime = self.gameTime
-    end
-  else
-    -- After the last scripted wave, spawn smaller waves periodically
-    local timeSinceLastWave = self.gameTime - self.lastWaveTime
-    
-    if timeSinceLastWave > 5 then  -- Every 5 seconds
-      -- Calculate count based on game time
-      local count = math.floor(5 + self.gameTime / 10)
-      
-      -- Spawn the wave
-      self:spawnWave(count)
-      
-      -- Log the wave start
-      if Debug then
-        Debug.log("WAVE", "Extra wave started with " .. count .. " enemies")
-      end
-      
-      -- Emit wave start event
-      if EventBus then
-        EventBus:emit("WAVE_START", {
-          wave = "extra",
-          count = count
-        })
-      end
-      
-      self.lastWaveTime = self.gameTime
-    end
-  end
+  -- Process gradual enemy spawning
+  self:processGradualSpawning(dt)
   
-  -- Update all active enemies
+  -- Update all enemies
   for i = #self.enemies, 1, -1 do
     local enemy = self.enemies[i]
     enemy:update(dt)
     
-    -- Remove dead enemies
-    if enemy.isDead then
+    -- Remove dead enemies that have completed fadeout
+    if enemy:shouldRemove() then
       table.remove(self.enemies, i)
     end
   end
 end
 
--- Spawn a wave of enemies
--- @param count - Number of enemies to spawn
-function Spawner:spawnWave(count)
-  -- Apply spawn multiplier from debug tuning
-  local adjustedCount = math.floor(count * self.spawnMultiplier)
+-- Check if a new wave should start
+function Spawner:checkWaveStart()
+  -- Skip if no more waves or already spawning
+  if self.nextWaveIndex > #self.waveConfig or self.waveInProgress then
+    return
+  end
   
-  -- Get screen dimensions
-  local width, height = love.graphics.getDimensions()
+  -- Get the next wave info
+  local nextWave = self.waveConfig[self.nextWaveIndex]
   
-  -- Spawn the requested number of enemies
-  for i = 1, adjustedCount do
-    -- Choose a random position on the screen edge
-    local x, y = self:getSpawnPosition(width, height)
+  -- Check if it's time to start this wave
+  if self.gameTime >= nextWave.time then
+    -- Start a new wave
+    self:startNewWave(nextWave.count)
     
-    -- Create a new enemy
-    local enemy = Enemy.new(x, y, self.player)
+    -- Move to the next wave configuration
+    self.nextWaveIndex = self.nextWaveIndex + 1
+    self.lastWaveTime = self.gameTime
     
-    -- Add to active enemies list
-    table.insert(self.enemies, enemy)
+    -- Log wave start if debug is available
+    if Debug and Debug.log then
+      Debug.log("SPAWN", "Wave " .. (self.nextWaveIndex - 1) .. " started: " .. nextWave.count .. " enemies at time " .. string.format("%.1f", self.gameTime))
+    end
+    
+    -- Emit wave start event
+    if EventBus then
+      EventBus:emit("WAVE_START", {count = nextWave.count, time = self.gameTime})
+    end
   end
 end
 
--- Get a random position on the screen edge for spawning
--- @param width - Screen width
--- @param height - Screen height
--- @return x, y - Spawn coordinates
-function Spawner:getSpawnPosition(width, height)
-  -- Minimum distance from player to spawn
-  local minDistance = 150
+-- Start a new wave
+-- @param count - Number of enemies in the wave
+function Spawner:startNewWave(count)
+  self.pendingSpawns = count
+  self.waveInProgress = true
+  self.nextSpawnTime = self.gameTime
   
-  -- Edge padding
-  local padding = 20
-  
-  local x, y
-  local validPosition = false
-  
-  -- Keep trying until we get a valid position
-  while not validPosition do
-    -- Choose which edge to spawn on (0=top, 1=right, 2=bottom, 3=left)
-    local edge = math.floor(math.random() * 4)
-    
-    if edge == 0 then
-      -- Top edge
-      x = math.random(padding, width - padding)
-      y = padding
-    elseif edge == 1 then
-      -- Right edge
-      x = width - padding
-      y = math.random(padding, height - padding)
-    elseif edge == 2 then
-      -- Bottom edge
-      x = math.random(padding, width - padding)
-      y = height - padding
-    else
-      -- Left edge
-      x = padding
-      y = math.random(padding, height - padding)
+  -- Immediately spawn the first enemy
+  self:spawnSingleEnemy()
+  self.pendingSpawns = self.pendingSpawns - 1
+end
+
+-- Process gradual spawning of enemies
+-- @param dt - Delta time since last update
+function Spawner:processGradualSpawning(dt)
+  -- Skip if no wave in progress or no pending spawns
+  if not self.waveInProgress or self.pendingSpawns <= 0 then
+    -- Mark wave as complete if all enemies spawned
+    if self.waveInProgress and self.pendingSpawns <= 0 then
+      self.waveInProgress = false
     end
-    
-    -- Check distance from player
-    local dx = x - self.player.x
-    local dy = y - self.player.y
-    local dist = math.sqrt(dx * dx + dy * dy)
-    
-    if dist >= minDistance then
-      validPosition = true
-    end
+    return
   end
   
-  return x, y
+  -- Check if it's time to spawn the next enemy
+  if self.gameTime >= self.nextSpawnTime then
+    -- Spawn an enemy
+    self:spawnSingleEnemy()
+    
+    -- Reduce pending spawns
+    self.pendingSpawns = self.pendingSpawns - 1
+    
+    -- Calculate time for next spawn
+    local spawnInterval = self.minSpawnInterval + math.random() * (self.maxSpawnInterval - self.minSpawnInterval)
+    self.nextSpawnTime = self.gameTime + spawnInterval
+  end
+end
+
+-- Spawn a single enemy at a random position
+function Spawner:spawnSingleEnemy()
+  -- Require arena manager to determine spawn positions
+  if not self.arenaManager then
+    if Debug and Debug.log then
+      Debug.log("ERROR", "Cannot spawn enemy: Arena manager not available")
+    end
+    return
+  end
+  
+  -- Get spawn parameters
+  local minDist = Settings.spawner.min_spawn_distance
+  local maxDist = Settings.spawner.max_spawn_distance
+  
+  -- Get random position around player
+  local x, y = self.arenaManager:getRandomPositionAroundTarget(
+    self.player.x, 
+    self.player.y, 
+    minDist,
+    maxDist
+  )
+  
+  -- Create an enemy
+  local enemy = Enemy.new(x, y, self.player, self.arenaManager)
+  table.insert(self.enemies, enemy)
+  
+  -- Log spawn if debug is available
+  if Debug and Debug.log then
+    Debug.log("SPAWN", "Enemy spawned at " .. string.format("%.1f, %.1f", x, y))
+  end
 end
 
 -- Draw all enemies
 function Spawner:draw()
+  -- Draw each enemy
   for _, enemy in ipairs(self.enemies) do
     enemy:draw()
   end
 end
 
--- Get the list of active enemies
--- @return Table of enemies
+-- Get list of active enemies
+-- @return Table of enemy objects
 function Spawner:getEnemies()
   return self.enemies
 end

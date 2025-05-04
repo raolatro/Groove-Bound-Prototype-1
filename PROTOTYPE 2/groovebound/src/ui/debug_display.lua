@@ -19,17 +19,22 @@ local function safeRequire(modulePath)
   end
 end
 
--- Safely get settings with defaults
-local settings = safeRequire("src/core/settings")
+-- Load settings with defaults
+local Settings = safeRequire("src/core/settings")
 
 -- Default settings to use if the settings module fails to load
 local DEFAULT_SETTINGS = {
-  debug_display = {
-    max_rows = 20,
-    ttl_secs = 10,
-    font_size = 10,
-    font_color = {1, 0, 0, 1},
-    bg_color = {0, 0, 0, 0.5}
+  debug = {
+    enabled = true,
+    display = {
+      max_rows = 30,
+      ttl_secs = 20,
+      font_size = 20,
+      font_color = {1, 0, 0, 1},
+      bg_color = {0, 0, 0, 0.5},
+      enabled = true,
+      position = {x = 10, y = 10}
+    }
   }
 }
 
@@ -40,7 +45,7 @@ local function getSetting(path, default)
     table.insert(parts, part)
   end
   
-  local current = settings
+  local current = Settings
   for _, part in ipairs(parts) do
     if current and type(current) == "table" and current[part] ~= nil then
       current = current[part]
@@ -72,20 +77,23 @@ end
 local Debug = {}
 
 -- Initialize the debug display
-function Debug:init()
+function Debug.init()
   -- Ensure we have a messages table
-  self.messages = {}
-  self.lastTime = love.timer.getTime()
+  Debug.messages = {}
+  Debug.lastTime = love.timer.getTime()
   
   -- Create a small font for debug messages
-  local fontSize = getSetting("debug_display.font_size", 10)
-  self.font = love.graphics.newFont(fontSize)
+  local fontSize = getSetting("debug.display.font_size", 10)
+  Debug.font = love.graphics.newFont(fontSize)
+  
+  -- Store master debug enabled state
+  Debug.enabled = getSetting("debug.enabled", true)
   
   -- Process any pending logs that were created before Debug was initialized
   if _G.pendingLogs and #_G.pendingLogs > 0 then
     print("Processing " .. #_G.pendingLogs .. " pending debug log entries")
     for _, logEntry in ipairs(_G.pendingLogs) do
-      self:log(logEntry.tag, logEntry.message)
+      Debug.log(logEntry.tag, logEntry.message)
     end
     -- Clear pending logs after processing
     _G.pendingLogs = {}
@@ -93,34 +101,47 @@ function Debug:init()
   
   -- Replace the temporary global log function with the real one
   if _G.SafeLog then
-    _G.Debug = self
+    _G.Debug = Debug
   end
   
   print("Debug display initialized successfully")
+  return Debug
 end
 
 -- Add a log message to the debug display
 -- @param tag - Category tag for the message
 -- @param message - The message content
-function Debug:log(tag, message)
+-- @param fileKey - Optional file-specific debug key to check (e.g., 'player', 'bullet')
+function Debug.log(tag, message, fileKey)
   -- Always log to console for safety
   print(string.format("[%s] %s: %s", os.date("%H:%M:%S"), tag, message))
   
-  -- Add to emergency log (globally accessible)
-  table.insert(_G.emergency_log, {
-    message = string.format("[%s] %s", tag, message),
-    time = os.time()
-  })
+  -- Check if debug is enabled globally
+  local debugEnabled = getSetting("debug.enabled", true)
+  if not debugEnabled then return end
   
-  -- Keep emergency log size reasonable
-  while #_G.emergency_log > 50 do
-    table.remove(_G.emergency_log, 1)
+  -- Check file-specific debug flag if provided
+  if fileKey and not getSetting("debug.files." .. fileKey, true) then
+    return -- Skip this log if file-specific debugging is disabled
+  end
+  
+  -- Add to emergency log (globally accessible)
+  if _G.emergency_log then
+    table.insert(_G.emergency_log, {
+      message = string.format("[%s] %s", tag, message),
+      time = os.time()
+    })
+    
+    -- Keep emergency log size reasonable
+    while #_G.emergency_log > 50 do
+      table.remove(_G.emergency_log, 1)
+    end
   end
   
   -- Then try to add to the regular messages table
-  if self.messages then
+  if Debug.messages then
     -- Add new message with current time
-    table.insert(self.messages, {
+    table.insert(Debug.messages, {
       tag = tag,
       text = tostring(message),
       time = love.timer.getTime(),
@@ -129,71 +150,68 @@ function Debug:log(tag, message)
     
     -- Keep only the most recent messages
     local maxRows = getSetting("debug_display.max_rows", 20)
-    while #self.messages > maxRows do
-      table.remove(self.messages, 1)
+    while #Debug.messages > maxRows do
+      table.remove(Debug.messages, 1)
     end
   end
 end
 
 -- Update the debug display (remove expired messages)
 -- @param dt - Delta time since last update
-function Debug:update(dt)
-  -- Skip if messages table doesn't exist
-  if not self.messages then
-    self.messages = {}
-    return
-  end
+function Debug.update(dt)
+  -- Skip if debug display is not initialized
+  if not Debug.messages then return end
   
-  local currentTime = love.timer.getTime()
-  local ttl = getSetting("debug_display.ttl_secs", 10)
+  -- Skip if debug display is disabled
+  if not getSetting("debug.display.enabled", true) then return end
   
-  -- Remove messages older than the TTL
-  local i = 1
-  while i <= #self.messages do
-    if currentTime - self.messages[i].time > ttl then
-      table.remove(self.messages, i)
-    else
-      i = i + 1
+  -- Update time
+  Debug.lastTime = love.timer.getTime()
+  
+  -- Get max time-to-live for messages
+  local ttl = getSetting("debug.display.ttl_secs", 20)
+  
+  -- Remove expired messages
+  for i = #Debug.messages, 1, -1 do
+    local msg = Debug.messages[i]
+    if Debug.lastTime - msg.time > ttl then
+      table.remove(Debug.messages, i)
     end
   end
-  
-  self.lastTime = currentTime
 end
 
 -- Draw the debug overlay
-function Debug:draw()
-  -- Skip if no messages to display
-  if not self.messages or #self.messages == 0 then
-    return
-  end
+function Debug.draw()
+  -- Skip if debug display is not initialized
+  if not Debug.messages then return end
   
-  -- Create font if it doesn't exist
-  if not self.font then
-    local fontSize = getSetting("debug_display.font_size", 10)
-    self.font = love.graphics.newFont(fontSize)
-  end
+  -- Skip if debug display is disabled
+  if not getSetting("debug.display.enabled", true) then return end
+  
+  -- Skip if master debug flag is disabled
+  if not getSetting("debug.enabled", true) then return end
   
   -- Save current graphics state
   love.graphics.push("all")
   
   -- Set font for debug messages
-  love.graphics.setFont(self.font)
+  love.graphics.setFont(Debug.font)
   
   -- Define size constraints for debug overlay
   local maxWidth = 350 -- Maximum width for debug overlay
   local maxHeight = 200 -- Maximum height to ensure it doesn't take over the screen
-  local lineHeight = getSetting("debug_display.font_size", 10) + 2 -- Line height with spacing
+  local lineHeight = getSetting("debug.display.font_size", 10) + 2 -- Line height with spacing
   
   -- Calculate how many messages we can display based on max height
   local maxVisibleMessages = math.floor((maxHeight - 4) / lineHeight)
-  local messageCount = math.min(#self.messages, maxVisibleMessages)
+  local messageCount = math.min(#Debug.messages, maxVisibleMessages)
   
   -- Calculate actual width and height
   local width = maxWidth
   local height = messageCount * lineHeight + 4
   
   -- Get background color with fallback to semi-transparent black
-  local bgColor = getSetting("debug_display.bg_color", {0, 0, 0, 0.5})
+  local bgColor = getSetting("debug.display.bg_color", {0, 0, 0, 0.5})
   love.graphics.setColor(bgColor)
   
   -- Draw background with rounded corners for better appearance
@@ -201,67 +219,55 @@ function Debug:draw()
   
   -- Get only the most recent messages that fit in our display area
   local visibleMessages = {}
-  local count = #self.messages
-  local startIdx = math.max(1, count - maxVisibleMessages + 1)
-  
-  -- Collect the most recent messages that will fit in our display
-  for i = startIdx, count do
-    table.insert(visibleMessages, self.messages[i])
+  for i = math.max(1, #Debug.messages - maxVisibleMessages + 1), #Debug.messages do
+    table.insert(visibleMessages, Debug.messages[i])
   end
   
-  -- Draw messages with fade effect
-  for i, msg in ipairs(visibleMessages) do
-    -- Calculate alpha based on remaining time for fade-out effect
-    local alpha = 1.0
-    local elapsed = love.timer.getTime() - msg.time
-    local ttl = getSetting("debug_display.ttl_secs", 10)
+  -- Display overflow indicator if needed
+  if #Debug.messages > maxVisibleMessages then
+    local overflowCount = #Debug.messages - maxVisibleMessages
+    local indicatorColor = getSetting("debug.display.font_color", {1, 0.5, 0, 1})
+    love.graphics.setColor(indicatorColor[1], indicatorColor[2], indicatorColor[3], 0.5)
+    love.graphics.print("+ " .. overflowCount .. " more", 8, 6)
+  end
+  
+  -- Draw each visible message
+  local y = 6
+  for i, message in ipairs(visibleMessages) do
+    -- Set message color
+    local fontColor = getSetting("debug.display.font_color", {1, 0.5, 0, 1})
+    love.graphics.setColor(fontColor)
     
-    -- Fade out in the last 2 seconds of display time
-    if elapsed > (ttl - 2) then
-      alpha = math.max(0, (ttl - elapsed) / 2)
-    end
+    -- Format message with tag
+    local text = string.format("[%s] %s", message.tag, message.text)
     
-    -- Set color with calculated alpha, safely handling missing color values
-    local color = msg.color or {1, 0, 0, 1} -- Default to red if color missing
-    -- Ensure color has all four components
-    if not color[4] then color[4] = 1 end
-    
-    -- Apply the color with alpha
-    love.graphics.setColor(color[1], color[2], color[3], color[4] * alpha)
-    
-    -- Draw message text with tag prefix
-    local y = 4 + (i - 1) * lineHeight
-    local tagText = msg.tag and ("[" .. msg.tag .. "] ") or ""
-    local displayText = tagText .. (msg.text or "")
-    
-    -- Truncate long messages to fit within width
-    if self.font:getWidth(displayText) > (width - 16) then
-      -- Try to fit as much text as possible
-      local truncated = ""
-      for j = 1, #displayText do
-        local testText = string.sub(displayText, 1, j) .. "..."
-        if self.font:getWidth(testText) > (width - 16) then
-          truncated = string.sub(displayText, 1, j-1) .. "..."
+    -- Truncate message if it's too long for the display
+    if love.graphics.getFont():getWidth(text) > maxWidth - 10 then
+      -- Find the maximum number of characters that will fit
+      local maxChars = 0
+      for i = 1, #text do
+        if love.graphics.getFont():getWidth(text:sub(1, i)) > maxWidth - 10 then
+          maxChars = i - 4 -- Allow space for ellipsis
           break
         end
       end
-      displayText = truncated
+      
+      -- Truncate and add ellipsis
+      if maxChars > 0 then
+        text = text:sub(1, maxChars) .. "..."
+      end
     end
     
     -- Draw the message
-    love.graphics.print(displayText, 8, y)  
+    love.graphics.print(text, 8, y)
+    
+    -- Move to next line
+    y = y + lineHeight
   end
   
-  -- Draw message count indicator if there are more messages than we can show
-  if count > maxVisibleMessages then
-    local hiddenCount = count - maxVisibleMessages
-    love.graphics.setColor(1, 0.7, 0, 0.8) -- Orange color for indicator
-    love.graphics.print("+ " .. hiddenCount .. " more", width - 70, height - lineHeight)  
-  end
-  
-  -- Restore previous graphics state
+  -- Restore graphics state
   love.graphics.pop()
 end
 
--- Return the module
+-- Return the Debug module
 return Debug

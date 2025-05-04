@@ -117,5 +117,12 @@ function XPSystem:setLevelUpCallback(callback)
   self.onLevelUp = callback
 end
 
+-- Check if player has enough XP to level up
+-- @return true if player can level up, false otherwise
+function XPSystem:checkLevelUp()
+  -- Check if XP exceeds the threshold for next level
+  return self.xp >= self.nextLevelThreshold
+end
+
 -- Return the XP system module
 return XPSystem

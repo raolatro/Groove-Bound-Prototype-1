@@ -1,18 +1,23 @@
 -- Level Up Modal
 -- Displays when player levels up, showing ability choices
+local Settings = require("src/core/settings")
 
 local LevelUpModal = {}
 
 -- Create a new level up modal
+-- @param player - Reference to the player entity for checking weapon levels
 -- @param onClose - Callback function to call when modal is closed
 -- @return A new level up modal object
-function LevelUpModal.new(onClose)
-  -- Default upgrade options if none provided
-  local options = {
-    "Power Chord Lv2",  -- Increases weapon damage
-    "Bass Drop",        -- Area effect weapon
-    "Speed Up"          -- Movement speed increase
-  }
+function LevelUpModal.new(player, onClose)
+  -- Debug log if enabled
+  if Settings.debug.enabled and Settings.debug.files.levelup then
+    if Debug and Debug.log then
+      Debug.log("LEVELUP", "Creating level up modal")
+    end
+  end
+  
+  -- Generate upgrade options based on player's current inventory
+  local options = LevelUpModal.generateOptions(player)
   
   local self = {
     width = 600,                 -- Modal width
@@ -37,6 +42,48 @@ function LevelUpModal.new(onClose)
   end
   
   return self
+end
+
+-- Generate upgrade options based on the player's current inventory
+-- @param player - Reference to the player entity
+-- @return Array of upgrade options
+function LevelUpModal.generateOptions(player)
+  local options = {}
+  
+  -- Check if debug logging is enabled
+  local debugEnabled = Settings.debug.enabled and Settings.debug.files.levelup
+  
+  -- Add Power Chord upgrade with the correct level based on player's current inventory
+  local powerChordLevel = 1
+  
+  -- If player exists and has weapons, check for existing Power Chord
+  if player and player.weapons then
+    for i, weapon in ipairs(player.weapons) do
+      if weapon.name == "Power Chord" then
+        powerChordLevel = weapon.level + 1
+        if debugEnabled and Debug and Debug.log then
+          Debug.log("LEVELUP", "Found Power Chord at level " .. weapon.level)
+        end
+        break
+      end
+    end
+  end
+  
+  -- Add Power Chord with correct level
+  table.insert(options, "Power Chord Lv" .. powerChordLevel)
+  
+  -- Add other weapon options
+  table.insert(options, "Bass Drop")
+  
+  -- Add stat boost option
+  table.insert(options, "Speed Up")
+  
+  -- Log generated options if debug is enabled
+  if debugEnabled and Debug and Debug.log then
+    Debug.log("LEVELUP", "Generated options: " .. table.concat(options, ", "))
+  end
+  
+  return options
 end
 
 -- Update the level up modal

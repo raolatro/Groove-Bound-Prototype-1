@@ -1,6 +1,7 @@
 -- Bullet entity
 -- Represents projectiles fired by the player
 
+local Settings = require("src/core/settings")
 local Bullet = {}
 
 -- Create a new bullet
@@ -8,18 +9,28 @@ local Bullet = {}
 -- @param y - Starting Y position
 -- @param dx - X direction component (normalized)
 -- @param dy - Y direction component (normalized)
--- @param damage - Damage amount (default: 10)
+-- @param damage - Damage amount
+-- @param speed - Movement speed
+-- @param size - Size of the bullet
+-- @param lifetime - Lifetime in seconds
 -- @return A new bullet object
-function Bullet.new(x, y, dx, dy, damage)
+function Bullet.new(x, y, dx, dy, damage, speed, size, lifetime)
+  -- Debug logging if enabled
+  if Settings.debug.enabled and Settings.debug.files.bullet then
+    if Debug and Debug.log then
+      Debug.log("BULLET", string.format("Creating bullet at (%.1f, %.1f) with direction (%.1f, %.1f)", x, y, dx, dy))
+    end
+  end
+  
   local self = {
     x = x,                -- X position
     y = y,                -- Y position
     dx = dx,              -- X direction (normalized)
     dy = dy,              -- Y direction (normalized)
-    speed = 400,          -- Movement speed (pixels per second)
-    damage = damage or 10, -- Damage amount
-    life = 1.0,           -- Lifetime in seconds
-    size = 4,             -- Size of the bullet
+    speed = speed or Settings.weapons.base_weapon.bullet_speed,  -- Movement speed (pixels per second)
+    damage = damage or Settings.weapons.base_weapon.damage,      -- Damage amount
+    life = lifetime or Settings.weapons.base_weapon.bullet_lifetime, -- Lifetime in seconds
+    size = size or Settings.weapons.base_weapon.bullet_size,     -- Size of the bullet
     dead = false          -- Whether the bullet is dead
   }
   

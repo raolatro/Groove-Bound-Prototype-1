@@ -9,22 +9,54 @@ local Spawner = require("src/systems/spawner")
 local XPSystem = require("src/systems/xp_system")
 local UpgradeManager = require("src/systems/upgrade_manager")
 local LevelUpModal = require("src/ui/levelup_modal")
+local Camera = require("src/core/camera")
+local ArenaManager = require("src/systems/arena_manager")
+local CollisionSystem = require("src/systems/collision_system")
+local EnemySeparation = require("src/systems/enemy_separation")
+local HUDInventory = require("src/ui/hud_inventory")
+local Settings = require("src/core/settings")
 
 local RunState = {
   paused = false,           -- Pause state flag
   gameTimer = 0,            -- Game time in seconds
   xpGems = {},              -- Active XP gems
-  isLevelingUp = false      -- Flag for level-up state
+  isLevelingUp = false,     -- Flag for level-up state
+  arenaSize = {             -- Size of game arena
+    width = Settings.arena.width,
+    height = Settings.arena.height
+  },
+  enemyCollisionsEnabled = Settings.collision.enable_enemy_player, -- Whether enemies damage player on collision
+  showHitboxes = Settings.collision.show_hitboxes                 -- Debug flag for showing collision hitboxes
 }
 
 -- Called when entering this state
 function RunState:enter()
   -- Log state entry 
-  Debug.log("STATE", "Run state entered")
+  if Debug and Debug.log then
+    Debug.log("STATE", "Run state entered")
+  end
   
-  -- Initialize player at the center of the screen
-  local windowWidth, windowHeight = love.graphics.getDimensions()
-  self.player = Player.new(windowWidth / 2, windowHeight / 2)
+  -- Initialize arena with boundaries
+  self.arenaManager = ArenaManager:init()
+  
+  -- Initialize camera system
+  self.camera = Camera:init()
+  
+  -- Initialize collision system
+  self.collisionSystem = CollisionSystem:init()
+  
+  -- Initialize enemy separation system
+  self.enemySeparation = EnemySeparation:init()
+  
+  -- Initialize player at the center of the arena
+  local centerX, centerY = self.arenaManager:getCenter()
+  self.player = Player.new(centerX, centerY, self.arenaManager)
+  
+  -- Set camera reference in player for proper aiming
+  self.player.camera = self.camera
+  
+  -- Tell camera to follow player
+  self.camera:setTarget(self.player.x, self.player.y)
   
   -- Reset game state
   self.paused = false
@@ -32,14 +64,26 @@ function RunState:enter()
   self.xpGems = {}
   self.isLevelingUp = false
   
-  -- Initialize spawner system
-  self.spawner = Spawner.new(self.player)
+  -- Initialize spawner system with arena manager
+  self.spawner = Spawner.new(self.player, self.arenaManager)
   
   -- Initialize XP system
   self.xpSystem = XPSystem.new()
   
   -- Initialize upgrade manager
   self.upgradeManager = UpgradeManager.new(self.player)
+  
+  -- Initialize inventory display for HUD
+  self.inventoryHUD = HUDInventory.new(self.player)
+  
+  -- Register event listeners
+  if EventBus then
+    -- Listen for player death event
+    EventBus:on("PLAYER_DIED", function()
+      -- Brief delay before showing game over
+      self:scheduleGameOver(0.5)
+    end)
+  end
   
   -- Register event handlers
   EventBus:on("ENEMY_KILLED", function(data)
@@ -59,8 +103,8 @@ function RunState:enter()
     self.paused = true
     self.isLevelingUp = true
     
-    -- Create level-up modal
-    self.levelUpModal = LevelUpModal.new(function()
+    -- Create level-up modal with the player reference
+    self.levelUpModal = LevelUpModal.new(self.player, function()
       -- On modal close
       self.isLevelingUp = false
       self.paused = false
@@ -99,9 +143,8 @@ function RunState:mousepressed(x, y, button)
   for _, btn in ipairs(self.pauseButtons) do
     if BlockGrid:isPointInGrid(x, y, btn.col, btn.row, btn.width, btn.height) then
       if btn.label == "Resume" then
-        -- Resume game
-        self.paused = false
-        Debug.log("PAUSE", "Game resumed")
+        -- Resume the game (unpause)
+        self:resume()
       elseif btn.label == "Quit to Title" then
         -- Return to title screen
         Debug.log("PAUSE", "Quit to title")
@@ -140,66 +183,224 @@ end
 -- Update function
 -- @param dt - Delta time since last update
 function RunState:update(dt)
-  -- Skip updates when paused
-  if self.paused then return end
+  -- Always update debug system to ensure messages are processed
+  if Debug and Debug.update then
+    Debug.update(dt)
+  end
+  
+  -- Handle game over countdown if active
+  if self.gameOverTimer then
+    self.gameOverTimer = self.gameOverTimer - dt
+    if self.gameOverTimer <= 0 then
+      self:showGameOver()
+      return
+    end
+  end
+  
+  -- Skip updates if paused or in level-up state
+  if self.paused or self.isLevelingUp then return end
   
   -- Update game timer
   self.gameTimer = self.gameTimer + dt
   
-  -- Update input state with latest mouse position
-  local mouseX, mouseY = love.mouse.getPosition()
-  Input:updateMouse(mouseX, mouseY)
-  
-  -- Update spawner system
-  self.spawner:update(dt)
+  -- Update camera first (to track player movement)
+  self.camera:update(dt)
   
   -- Update player
   self.player:update(dt)
   
+  -- Set camera to follow player
+  self.camera:setTarget(self.player.x, self.player.y)
+  
+  -- Update spawner system
+  self.spawner:update(dt)
+  
+  -- Apply enemy separation to prevent overlapping
+  local enemies = self.spawner:getEnemies()
+  self.enemySeparation:update(enemies, dt)
+  
+  -- Update inventory HUD
+  if self.inventoryHUD then
+    self.inventoryHUD:update(dt)
+  end
+  
   -- Update XP gems
   for i = #self.xpGems, 1, -1 do
     local gem = self.xpGems[i]
-    if gem:update(dt, self.player) then
+    gem:update(dt, self.player)
+    
+    -- Check if gem was collected using collision system
+    if self.collisionSystem:checkPlayerGemCollision(self.player, gem) then
+      -- Mark as collected
+      gem.isCollected = true
+      
+      -- Give XP to player
+      self.xpSystem:addXP(gem.value)
+      
+      -- Log collection
+      if Debug and Debug.log then
+        Debug.log("XP", "Collected XP gem: +" .. gem.value .. " XP")
+      end
+    end
+    
+    -- Remove collected gems
+    if gem.isCollected then
       table.remove(self.xpGems, i)
     end
   end
   
+  -- Check for player leveling up
+  if self.xpSystem:checkLevelUp() then
+    -- Show level up modal
+    self.isLevelingUp = true
+    self.levelUpModal = LevelUpModal.new(self.upgradeManager:getAvailableUpgrades(3))
+    
+    -- Log the level up
+    if Debug and Debug.log then
+      Debug.log("XP", "Player reached level " .. self.xpSystem:getLevel())
+    end
+  end
+  
+  -- Handle player-enemy collisions
+  if self.enemyCollisionsEnabled then
+    local enemies = self.spawner:getEnemies()
+    
+    for _, enemy in ipairs(enemies) do
+      -- Skip dead enemies
+      if enemy.isDead then goto continue_enemy end
+      
+      -- Check collision between player and enemy
+      if self.collisionSystem:checkPlayerEnemyCollision(self.player, enemy) then
+        -- Calculate knockback direction (away from enemy)
+        local dx = self.player.x - enemy.x
+        local dy = self.player.y - enemy.y
+        
+        -- Normalize direction
+        local length = math.sqrt(dx * dx + dy * dy)
+        if length > 0 then
+          dx = dx / length * Settings.collision.knockback_force
+          dy = dy / length * Settings.collision.knockback_force
+        end
+        
+        -- Handle collision with enemy
+        self.collisionSystem:handlePlayerEnemyCollision(self.player, enemy, self.camera)
+      end
+      
+      ::continue_enemy::
+    end
+  end
+  
   -- Check bullet-enemy collisions
-  self:checkBulletEnemyCollisions()
+  if self.player.bullets and #self.player.bullets > 0 then
+    local enemies = self.spawner:getEnemies()
+    
+    for _, bullet in ipairs(self.player.bullets) do
+      for _, enemy in ipairs(enemies) do
+        -- Skip dead enemies
+        if enemy.isDead then goto continue_bullet end
+        
+        -- Check collision using collision system
+        if self.collisionSystem:checkBulletEnemyCollision(bullet, enemy) then
+          -- Calculate knockback direction (away from bullet)
+          local knockbackX = enemy.x - bullet.x
+          local knockbackY = enemy.y - bullet.y
+          
+          -- Normalize and scale knockback
+          local length = math.sqrt(knockbackX * knockbackX + knockbackY * knockbackY)
+          if length > 0 then
+            knockbackX = knockbackX / length * 200 -- Knockback force
+            knockbackY = knockbackY / length * 200
+          end
+          
+          -- Apply damage with knockback
+          local killed = enemy:takeDamage(bullet.damage, knockbackX, knockbackY)
+          
+          -- Mark bullet for removal
+          bullet.remove = true
+          
+          -- Break once a collision is found for this bullet
+          break
+        end
+        
+        ::continue_bullet::
+      end
+    end
+  end
 end
 
 -- Draw function
 function RunState:draw()
-  -- Clear the screen with dark gray
-  love.graphics.clear(0.2, 0.2, 0.2, 1)
+  -- Clear the screen with a dark background
+  love.graphics.clear(0.05, 0.05, 0.1, 1)
   
-  -- Draw arena background
-  local windowWidth, windowHeight = love.graphics.getDimensions()
-  love.graphics.setColor(0.15, 0.15, 0.15, 1)
-  love.graphics.rectangle("fill", 0, 0, windowWidth, windowHeight)
+  -- Apply camera transformations - everything drawn after this will be affected by camera
+  self.camera:apply()
   
-  -- Draw enemies
-  self.spawner:draw()
+  -- Draw arena boundaries first
+  self.arenaManager:draw()
   
   -- Draw XP gems
   for _, gem in ipairs(self.xpGems) do
     gem:draw()
   end
   
-  -- Draw player (and bullets)
+  -- Draw enemies
+  self.spawner:draw()
+  
+  -- Draw player (after enemies so player is on top)
   self.player:draw()
   
-  -- Draw HUD
+  -- Draw enemy separation debug visuals if enabled
+  if self.showHitboxes and self.enemySeparation then
+    self.enemySeparation:drawDebug(self.spawner:getEnemies())
+  end
+  
+  -- Draw collision hitboxes if debug mode is enabled
+  if self.showHitboxes then
+    -- Get all collidable objects
+    local collidables = {}
+    
+    -- Add player to collidables
+    table.insert(collidables, self.player)
+    
+    -- Add all enemies
+    for _, enemy in ipairs(self.spawner:getEnemies()) do
+      table.insert(collidables, enemy)
+    end
+    
+    -- Add all bullets
+    for _, bullet in ipairs(self.player.bullets) do
+      table.insert(collidables, bullet)
+    end
+    
+    -- Draw hitboxes for all collidables
+    self.collisionSystem:drawDebug(collidables)
+  end
+  
+  -- Revert camera transformations before drawing UI
+  self.camera:revert()
+  
+  -- Draw UI elements (not affected by camera)
   self:drawHUD()
+  
+  -- Draw inventory HUD
+  if self.inventoryHUD then
+    self.inventoryHUD:draw()
+  end
+  
+  -- Draw level up modal if active
+  if self.isLevelingUp and self.levelUpModal then
+    self.levelUpModal:draw()
+  end
   
   -- Draw pause menu if paused
   if self.paused and not self.isLevelingUp then
     self:drawPauseMenu()
   end
   
-  -- Draw level-up modal if active
-  if self.isLevelingUp and self.levelUpModal then
-    self.levelUpModal:draw()
+  -- Always draw debug overlay last so it's on top of everything
+  if Debug and Debug.draw then
+    Debug.draw()
   end
 end
 
@@ -355,5 +556,27 @@ function RunState:checkBulletEnemyCollisions()
   end
 end
 
--- Return the RunState table
+-- Schedule game over after a delay
+-- @param delay - Time in seconds to wait before showing game over screen
+function RunState:scheduleGameOver(delay)
+  self.gameOverTimer = delay or 0.5
+  
+  -- Log game over scheduled
+  if Debug and Debug.log then
+    Debug.log("GAME", "Game over scheduled in " .. delay .. " seconds")
+  end
+end
+
+-- Show game over screen
+function RunState:showGameOver()
+  -- Log game over
+  if Debug and Debug.log then
+    Debug.log("GAME", "Game over screen shown")
+  end
+  
+  -- Push game over state onto the state stack
+  StateStack:push(require("src/ui/states/game_over"))
+end
+
+-- Return the run state module
 return RunState
