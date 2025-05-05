@@ -45,6 +45,7 @@ end
 
 -- Handle key press events
 -- @param key - The key that was pressed
+-- @return boolean - true if the input was handled by this system
 function Input:keypressed(key)
   -- Movement keys
   if key == "w" or key == "up" then
@@ -57,8 +58,18 @@ function Input:keypressed(key)
     self.right = true
   -- Special keys
   elseif key == "escape" then
-    self.pause = true
+    -- Only set pause if we're in a valid state for game pause
+    -- Check if we're in the title or run state where global pause makes sense
+    local currentState = StateStack:peek()
+    if currentState and (currentState.name == "RunState" or currentState.name == "TitleState") then
+      self.pause = true
+      return true
+    end
+    -- Don't handle escape for other states, let them handle it
+    return false
   end
+  
+  return true
 end
 
 -- Handle key release events

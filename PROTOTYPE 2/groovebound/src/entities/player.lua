@@ -5,6 +5,7 @@ local Input = require("src/core/input")
 local Bullet = require("src/entities/bullet")
 local EventBus = require("src/core/event_bus")
 local Settings = require("src/core/settings")
+local WeaponsData = require("src/data/weapons")
 
 local Player = {}
 
@@ -204,22 +205,83 @@ end
 -- Fire a weapon
 -- @param weapon - The weapon to fire
 function Player:fireWeapon(weapon)
-  -- Create a new bullet
-  local bullet = Bullet.new(
-    self.x, 
-    self.y, 
-    self.aimDirectionX, 
-    self.aimDirectionY,
-    weapon.damage,
-    weapon.bulletSpeed,
-    weapon.bulletSize,
-    weapon.bulletLifetime
-  )
+  -- Get bullet count (default to 1 if not specified)
+  local bulletCount = weapon.bullet_count or 1
   
-  -- Add bullet to the list
-  table.insert(self.bullets, bullet)
+  -- Ensure we have at least 1 bullet
+  bulletCount = math.max(1, bulletCount)
   
-  -- Log bullet firing if debug is enabled
+  -- Get spread settings
+  local spreadMode = "fixed"
+  local spreadAngle = 0
+  
+  if weapon.spread then
+    spreadMode = weapon.spread.mode or "fixed"
+    spreadAngle = weapon.spread.angle or 0
+  end
+  
+  -- Log debug info
+  if Debug and Debug.log and Settings.debug.files.weapon then
+    Debug.log("WEAPON", string.format("Firing %s with %d bullets, spread: %s", 
+      weapon.name, bulletCount, spreadMode))
+  end
+  
+  -- Fire multiple bullets according to spread pattern
+  for i = 1, bulletCount do
+    -- Calculate direction based on spread type
+    local dirX, dirY = self.aimDirectionX, self.aimDirectionY
+    
+    if bulletCount > 1 then
+      -- Convert original direction to angle
+      local baseAngle = math.atan2(self.aimDirectionY, self.aimDirectionX)
+      local finalAngle = baseAngle
+      
+      if spreadMode == "fixed" then
+        -- Fixed angle spread
+        -- Calculate offset from center based on bullet index
+        -- For 3 bullets with 10 degree spread: -10, 0, 10 degrees
+        local offset = spreadAngle * (i - (bulletCount + 1) / 2) / (bulletCount - 1)
+        finalAngle = baseAngle + math.rad(offset)
+      elseif spreadMode == "full" then
+        -- Full 360 degree spread
+        local angleStep = 2 * math.pi / bulletCount
+        finalAngle = baseAngle + angleStep * (i - 1)
+      end
+      
+      -- Convert angle back to direction vector
+      dirX = math.cos(finalAngle)
+      dirY = math.sin(finalAngle)
+    end
+    
+    -- Log individual bullet direction in debug mode
+    if Debug and Debug.log and Settings.debug.files.bullet then
+      local angle = math.deg(math.atan2(dirY, dirX))
+      Debug.log("BULLET", string.format("Bullet %d/%d angle: %.1f°", 
+        i, bulletCount, angle))
+    end
+    
+    -- Create the bullet with calculated direction
+    local bullet = Bullet.new(
+      self.x, 
+      self.y, 
+      dirX, 
+      dirY,
+      weapon.damage,
+      weapon.bulletSpeed,
+      weapon.bulletSize,
+      weapon.bulletLifetime
+    )
+    
+    -- Set bullet color if specified
+    if weapon.bullet_color then
+      bullet.color = weapon.bullet_color
+    end
+    
+    -- Add bullet to the list
+    table.insert(self.bullets, bullet)
+  end
+  
+  -- Log weapon firing if debug is enabled
   if Debug and Debug.log then
     Debug.log("WEAPON", "Fired " .. weapon.name .. " (Level " .. weapon.level .. ")")
   end

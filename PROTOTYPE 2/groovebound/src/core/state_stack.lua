@@ -71,11 +71,17 @@ end
 
 -- Pass keypressed events to the current top state
 -- @param key - The key that was pressed
+-- @return boolean - True if the key was handled by the state, false otherwise
 function StateStack:keypressed(key)
   local currentState = self:peek()
   if currentState and currentState.keypressed then
-    currentState:keypressed(key)
+    -- Call the state's keypressed handler and get if it was handled
+    local handled = currentState:keypressed(key)
+    -- Return whether the key was handled by the state
+    return handled
   end
+  -- No state or no handler means the key wasn't handled
+  return false
 end
 
 -- Pass keyreleased events to the current top state

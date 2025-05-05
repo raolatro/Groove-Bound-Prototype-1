@@ -3,6 +3,9 @@
 local Settings = require("src/core/settings")
 
 local GameOverState = {
+  -- State identifier
+  name = "GameOverState",
+  
   -- Timer for transitions
   timer = 0,
   fadeDuration = 0.5 -- Duration for fade effects
@@ -88,12 +91,18 @@ end
 
 -- Handle key press events
 -- @param key - The key that was pressed
+-- @return boolean - true if the key was handled by this state
 function GameOverState:keypressed(key)
   if key == "escape" then
     self:returnToTitle()
+    return true
   elseif key == "space" or key == "return" then
     self:restart()
+    return true
   end
+  
+  -- Key not handled by this state
+  return false
 end
 
 -- Handle mouse press events

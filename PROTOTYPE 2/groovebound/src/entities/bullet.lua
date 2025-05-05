@@ -2,6 +2,10 @@
 -- Represents projectiles fired by the player
 
 local Settings = require("src/core/settings")
+
+-- Get ArenaManager singleton
+local ArenaManager = require("src/systems/arena_manager")
+
 local Bullet = {}
 
 -- Create a new bullet
@@ -31,7 +35,8 @@ function Bullet.new(x, y, dx, dy, damage, speed, size, lifetime)
     damage = damage or Settings.weapons.base_weapon.damage,      -- Damage amount
     life = lifetime or Settings.weapons.base_weapon.bullet_lifetime, -- Lifetime in seconds
     size = size or Settings.weapons.base_weapon.bullet_size,     -- Size of the bullet
-    dead = false          -- Whether the bullet is dead
+    dead = false,          -- Whether the bullet is dead
+    color = Settings.weapons.base_weapon.bullet_color
   }
   
   -- Set the metatable for the bullet object
@@ -60,10 +65,17 @@ function Bullet:update(dt)
     return true
   end
   
-  -- Check if bullet is off-screen
-  local screenWidth, screenHeight = love.graphics.getDimensions()
-  if self.x < 0 or self.x > screenWidth or self.y < 0 or self.y > screenHeight then
+  -- Check if bullet is outside arena bounds
+  -- Use ArenaManager to determine if bullet is still in the playable area
+  if not ArenaManager:isInside(self.x, self.y) then
+    -- Mark as dead for cleanup, but don't draw
     self.dead = true
+    
+    -- Log bullet leaving arena if debug is enabled
+    if Settings.debug.enabled and Settings.debug.files.bullet and Debug and Debug.log then
+      Debug.log("BULLET", string.format("Bullet left arena at (%.1f, %.1f)", self.x, self.y))
+    end
+    
     return true
   end
   
@@ -79,7 +91,7 @@ function Bullet:draw()
   love.graphics.push("all")
   
   -- Draw bullet as a yellow rectangle
-  love.graphics.setColor(0.9, 0.9, 0.2, 1) -- Yellow color
+  love.graphics.setColor(self.color) -- Yellow color
   
   -- Draw centered on bullet position
   local halfSize = self.size / 2

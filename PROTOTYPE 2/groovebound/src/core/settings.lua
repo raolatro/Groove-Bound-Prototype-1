@@ -47,7 +47,8 @@ Settings.weapons = {
     fire_rate = 0.1,
     bullet_speed = 300,     -- Increased for better gameplay
     bullet_size = 10,
-    bullet_lifetime = 3.0
+    bullet_lifetime = 3.0,
+    bullet_color = {1, 0, 0, 1}
   },
   -- Named weapons with proper level progression
   power_chord = {
@@ -56,15 +57,26 @@ Settings.weapons = {
     fire_rate = 0.4,
     bullet_speed = 450,
     bullet_size = 6,
-    bullet_lifetime = 1.2
+    bullet_lifetime = 1.2,
+    bullet_color = {1, 0, 1, 1}
   },
   bass_drop = {
     name = "Bass Drop",
     damage = 25,
     fire_rate = 0.8,
     bullet_speed = 300,
-    bullet_size = 12,
-    bullet_lifetime = 0.8
+    bullet_size = 20,
+    bullet_lifetime = 0.8,
+    bullet_color = {0, 1, 1, 1}
+  },
+  omnigun = {
+    name = "OmniGun",
+    damage = 50,
+    fire_rate = 0.2,
+    bullet_speed = 600,
+    bullet_size = 16,
+    bullet_lifetime = 0.5,
+    bullet_color = {1, 1, 0, 1},
   }
 }
 
@@ -77,8 +89,27 @@ Settings.enemies = {
     size = 12,              -- Enemy size
     damage = 10,            -- Damage dealt to player
     spawn_distance = 400,   -- Min spawn distance from player
-    xp_value = 1            -- XP dropped when killed
+    xp_value = 10,          -- XP dropped when killed
+    color = {1, 1, 1, 1},   -- Enemy color
   },
+  intermediate = {
+    hp = 50,               -- Health points
+    speed = 120,            -- Movement speed
+    size = 24,              -- Enemy size
+    damage = 20,            -- Damage dealt to player
+    spawn_distance = 600,   -- Min spawn distance from player
+    xp_value = 20,          -- XP dropped when killed
+    color = {0, 1, 1, 1},   -- Enemy color
+  },
+  advanced = {
+    hp = 100,               -- Health points
+    speed = 180,            -- Movement speed
+    size = 36,              -- Enemy size
+    damage = 30,            -- Damage dealt to player
+    spawn_distance = 800,   -- Min spawn distance from player
+    xp_value = 30,          -- XP dropped when killed
+    color = {1, 0, 1, 1},   -- Enemy color
+  }
   -- Add more enemy types here as needed
 }
 
@@ -108,16 +139,16 @@ Settings.debug = {
   -- Per-file debug flags
   files = {
     player = true,           -- Debug output for player.lua
-    enemy = true,            -- Debug output for enemy.lua
-    bullet = true,           -- Debug output for bullet.lua
-    arena = true,            -- Debug output for arena.lua
-    camera = true,           -- Debug output for camera.lua
-    collision = true,        -- Debug output for collision_system.lua
-    spawner = true,          -- Debug output for spawner.lua
-    xp = true,               -- Debug output for xp_system.lua
-    weapon = true,           -- Debug output for weapons
-    input = true,            -- Debug output for input.lua
-    state = true,            -- Debug output for states
+    enemy = false,            -- Debug output for enemy.lua
+    bullet = false,           -- Debug output for bullet.lua
+    arena = false,            -- Debug output for arena.lua
+    camera = false,           -- Debug output for camera.lua
+    collision = false,        -- Debug output for collision_system.lua
+    spawner = false,          -- Debug output for spawner.lua
+    xp = false,               -- Debug output for xp_system.lua
+    weapon = false,           -- Debug output for weapons
+    input = false,            -- Debug output for input.lua
+    state = false,            -- Debug output for states
     levelup = true,          -- Debug output for level up system
     dev_tuning = true        -- Debug output for dev tuning panel
   },
